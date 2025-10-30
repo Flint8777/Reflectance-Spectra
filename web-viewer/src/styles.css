@@ -1,0 +1,154 @@
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.app {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.toolbar {
+    padding: 8px 12px;
+    gap: 8px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #ddd;
+    background: #f5f5f5;
+}
+
+.toolbar button {
+    padding: 6px 12px;
+}
+
+/* メインエリア（凡例 + グラフ） */
+.main-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+/* 左側の凡例パネル */
+.legend-panel {
+    width: 350px;
+    min-width: 300px;
+    max-width: 450px;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+    background: #fafafa;
+}
+
+.legend-title {
+    padding: 12px;
+    font-weight: bold;
+    font-size: 14px;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+    background: #e8e8e8;
+}
+
+.legend-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: white;
+}
+
+.legend-item input[type="checkbox"] {
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.legend-item .color-box {
+    width: 30px;
+    height: 20px;
+    border: 1px solid #999;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.legend-item .filename {
+    flex: 1;
+    font-size: 12px;
+    overflow-wrap: break-word;
+    word-break: break-all;
+}
+
+.viewer {
+    flex: 1;
+    position: relative;
+}
+
+.plot-wrap {
+    position: absolute;
+    inset: 0;
+}
+
+/* クロスヘアオーバーレイ - マウス移動のみ検出、クリック/ドラッグは下に通す */
+.crosshair-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: none;
+    pointer-events: none;
+    /* すべてのイベントを下のPlotlyに通す */
+}
+
+.crosshair-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.cross-vert {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: rgba(255, 0, 0, 0.9);
+    transform: translateX(-0.5px);
+}
+
+.cross-hori {
+    position: absolute;
+    left: 0;
+    height: 1px;
+    width: 100%;
+    background: rgba(255, 0, 0, 0.9);
+    transform: translateY(-0.5px);
+}
+
+.coords {
+    position: absolute;
+    right: 8px;
+    top: 60px;
+    /* Plotlyツールバーの下に配置 */
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #333;
+    padding: 8px 10px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 4px;
+    line-height: 1.5;
+    z-index: 100;
+    /* ツールバーより前面に */
+}
