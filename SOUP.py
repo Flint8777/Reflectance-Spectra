@@ -144,7 +144,8 @@ class SpectralViewer(QMainWindow):
         # プロット領域の作成
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setBackground("w")  # 白背景
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        # グリッドを無効化してさらに軽量化
+        self.plot_widget.showGrid(x=False, y=False)
         # グラフエリアではマウスポインタを非表示（クロスヘアのみ表示）
         try:
             self.plot_widget.viewport().setCursor(Qt.BlankCursor)
@@ -517,10 +518,10 @@ class SpectralViewer(QMainWindow):
         if not self.plot_widget.sceneBoundingRect().contains(pos):
             return
 
-        # 時間ベースのスロットリング（最大120Hz）
+        # 時間ベースのスロットリング（最大60Hzに下げてさらに軽量化）
         now = time.perf_counter()
         if self._last_mouse_update is not None and (now - self._last_mouse_update) < (
-            1.0 / 120.0
+            1.0 / 60.0
         ):
             return
         self._last_mouse_update = now
