@@ -93,8 +93,8 @@ class SpectralViewer(QMainWindow):
         # レジェンドエリアのフレーム
         self.legend_frame = QFrame()
         self.legend_frame.setFrameShape(QFrame.StyledPanel)
-        self.legend_frame.setMaximumWidth(250)
-        self.legend_frame.setMinimumWidth(200)
+        self.legend_frame.setMaximumWidth(450)
+        self.legend_frame.setMinimumWidth(300)
 
         # レジェンドエリアのレイアウト
         legend_layout = QVBoxLayout(self.legend_frame)
@@ -108,7 +108,12 @@ class SpectralViewer(QMainWindow):
         # スクロールエリア（スペクトルが多い場合に対応）
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarAsNeeded
+        )  # 必要に応じて水平スクロールバーを表示
+        scroll_area.setVerticalScrollBarPolicy(
+            Qt.ScrollBarAsNeeded
+        )  # 必要に応じて垂直スクロールバーを表示
 
         # スクロール内のコンテンツウィジェット
         self.legend_content = QWidget()
@@ -129,9 +134,8 @@ class SpectralViewer(QMainWindow):
     def setup_graph(self):
         # グラフウィジェットのスタイル設定
         pg.setConfigOptions(antialias=True)  # アンチエイリアスを有効化
-        pg.setConfigOptions(
-            useOpenGL=True
-        )  # OpenGLアクセラレーションを有効化（大幅な高速化）
+        # OpenGLは互換性の問題があるため無効化
+        # pg.setConfigOptions(useOpenGL=True)
 
         # プロット領域の作成
         self.plot_widget = pg.PlotWidget()
@@ -143,6 +147,12 @@ class SpectralViewer(QMainWindow):
         view_box = self.plot_widget.getViewBox()
         view_box.setMouseMode(pg.ViewBox.RectMode)  # 矩形選択モードを設定
 
+        # 矩形選択の外観を設定（黄色の半透明）
+        view_box.rbScaleBox.setPen(pg.mkPen(color="y", width=2))  # 黄色の枠線
+        view_box.rbScaleBox.setBrush(
+            pg.mkBrush(255, 255, 0, 50)
+        )  # 黄色の半透明塗りつぶし
+
         # 初期状態での表示範囲を固定（データ読み込み前の動きを抑制）
         view_box.setRange(xRange=[0, 20], yRange=[0, 1], padding=0.1)
 
@@ -150,7 +160,6 @@ class SpectralViewer(QMainWindow):
         styles = {"color": "#000", "font-size": "24px", "font-weight": "bold"}
         self.plot_widget.setLabel("left", "Reflectance", **styles)
         self.plot_widget.setLabel("bottom", "Wavelength (μm)", **styles)
-        self.plot_widget.setTitle("Reflectance Spectrum", color="#000", size="18pt")
 
         # 座標表示のテキストアイテムをグラフの右上に配置
         self.cursor_text = pg.TextItem(
@@ -160,9 +169,9 @@ class SpectralViewer(QMainWindow):
             fill=(255, 255, 255, 200),
             border=pg.mkPen("k"),
         )
-        # フォントサイズとスタイルを設定
+        # フォントサイズとスタイルを設定（軸ラベルと同じ24px）
         font = QFont()
-        font.setPixelSize(14)
+        font.setPixelSize(24)
         font.setBold(True)
         self.cursor_text.setFont(font)
         self.plot_widget.addItem(self.cursor_text)
@@ -171,14 +180,19 @@ class SpectralViewer(QMainWindow):
         view_range = self.plot_widget.getViewBox().viewRange()
         self.cursor_text.setPos(view_range[0][1], view_range[1][1])
 
-        # カーソル垂直線
+        # カーソル垂直線（十字の縦線）
         self.vLine = pg.InfiniteLine(
             angle=90, movable=False, pen=pg.mkPen("r", width=1)
         )
         self.plot_widget.addItem(self.vLine)
 
+        # カーソル水平線（十字の横線）
+        self.hLine = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("r", width=1))
+        self.plot_widget.addItem(self.hLine)
+
         # 初期状態では見えない位置に配置（データがない状態）
         self.vLine.setPos(-1000)
+        self.hLine.setPos(-1000)
 
         # スペクトル上のポイントをハイライトするためのスキャッターポイント
         self.cursorPoint = pg.ScatterPlotItem(
@@ -189,11 +203,9 @@ class SpectralViewer(QMainWindow):
         # 初期状態では何も表示しない（空のデータセット）
         self.cursorPoint.setData([], [])
 
-        # マウスイベントプロキシ（パフォーマンス向上のためイベントレート制限）
-        # レート制限を20fpsに下げて負荷をさらに軽減
-        self.proxy = pg.SignalProxy(
-            self.plot_widget.scene().sigMouseMoved, rateLimit=20, slot=self.mouse_moved
-        )
+        # マウスイベントを直接接続（SignalProxyを使わず最速に）
+        # SignalProxyによる遅延をなくして即座に反応
+        self.plot_widget.scene().sigMouseMoved.connect(self.mouse_moved)
 
         # ビューボックスの範囲変更イベントを監視（ズーム時に座標表示位置を更新）
         view_box = self.plot_widget.getViewBox()
@@ -288,7 +300,11 @@ class SpectralViewer(QMainWindow):
                     success_count += 1
 
                 except Exception as e:
-                    error_files.append(os.path.basename(file_path))
+                    error_files.append(f"{os.path.basename(file_path)} ({str(e)})")
+                    print(f"エラー詳細 - {file_path}: {str(e)}")  # デバッグ用
+                    import traceback
+
+                    traceback.print_exc()  # スタックトレースを表示
 
             # ファイル数を更新
             self.file_label.setText(f"読込数: {len(self.spectra)}")
@@ -351,19 +367,7 @@ class SpectralViewer(QMainWindow):
         item_layout = QHBoxLayout(item_frame)
         item_layout.setContentsMargins(5, 5, 5, 5)
 
-        # チェックボックス（表示/非表示）
-        checkbox = QCheckBox(filename)
-        checkbox.setChecked(True)
-        checkbox.stateChanged.connect(
-            lambda state, idx=index: self.toggle_spectrum_visibility(idx, state)
-        )
-        # ファイル名が長い場合でも色ボタンが見えるようにサイズポリシーを設定
-        checkbox.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        # テキストを省略表示
-        checkbox.setToolTip(filename)  # ツールチップで完全なファイル名を表示
-        item_layout.addWidget(checkbox, stretch=1)
-
-        # 色選択ボタン
+        # 色選択ボタン（左端に配置）
         color_button = QPushButton()
         color_button.setFixedSize(30, 20)
         color_button.setStyleSheet(
@@ -375,9 +379,25 @@ class SpectralViewer(QMainWindow):
         color_button.setToolTip("色を変更")
         item_layout.addWidget(color_button, stretch=0)
 
-        # レジェンドアイテムを保存
+        # チェックボックス（表示/非表示）
+        checkbox = QCheckBox()
+        checkbox.setChecked(True)
+        checkbox.stateChanged.connect(
+            lambda state, idx=index: self.toggle_spectrum_visibility(idx, state)
+        )
+        item_layout.addWidget(checkbox, stretch=0)
+
+        # ファイル名ラベル（複数行表示可能）
+        filename_label = QLabel(filename)
+        filename_label.setWordWrap(True)  # 長いテキストを折り返す
+        filename_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Minimum)
+        filename_label.setToolTip(filename)  # ツールチップで完全なファイル名を表示
+        item_layout.addWidget(filename_label, stretch=1)
+
+        # レジェンドアイテムを保存（反射率表示ラベルは不要なので削除）
         legend_item = {
             "checkbox": checkbox,
+            "filename_label": filename_label,
             "color_button": color_button,
             "frame": item_frame,
             "index": index,
@@ -426,11 +446,6 @@ class SpectralViewer(QMainWindow):
         # 表示されているスペクトルの数をカウント
         visible_count = sum(1 for s in self.spectra if s.get("visible", True))
 
-        # レジェンドを追加（複数スペクトルの場合）- プロット前に追加
-        if visible_count > 1:
-            legend = self.plot_widget.addLegend()
-            legend.setBrush(QBrush(QColor(255, 255, 255, 200)))
-
         # 全てのスペクトルをプロット（表示フラグがTrueのもののみ）
         for i, spectrum in enumerate(self.spectra):
             # 非表示の場合はスキップ
@@ -449,34 +464,15 @@ class SpectralViewer(QMainWindow):
                 wavelengths,
                 reflectances,
                 pen=pen,
-                name=filename,
-                # ダウンサンプリングとクリッピングで大幅に高速化
-                downsample=2,  # より強力なダウンサンプリング
-                autoDownsample=True,
-                clipToView=True,
-                skipFiniteCheck=True,  # 有限値チェックをスキップして高速化
+                # 最もシンプルな設定で互換性を優先
             )
             spectrum["curve"] = curve
 
-        # カーソルとテキストアイテムを追加（プロットの後に追加して最前面に表示）
+        # 十字カーソルとテキストアイテムを追加（プロットの後に追加して最前面に表示）
         self.plot_widget.addItem(self.vLine)
+        self.plot_widget.addItem(self.hLine)
         self.plot_widget.addItem(self.cursorPoint)
         self.plot_widget.addItem(self.cursor_text)
-
-        # グラフのタイトルを更新
-        if len(self.spectra) == 1:
-            title = f"Reflectance Spectrum: {self.spectra[0]['filename']}"
-        elif visible_count > 0:
-            title = f"Reflectance Spectra ({visible_count}/{len(self.spectra)} files visible)"
-        else:
-            title = f"Reflectance Spectra ({len(self.spectra)} files)"
-
-        self.plot_widget.setTitle(
-            title,
-            color="#000",
-            size="18pt",
-            bold=True,
-        )
 
         # スペクトル表示後に適切なズーム倍率に自動調整
         self.adjust_zoom_to_data()
@@ -491,81 +487,36 @@ class SpectralViewer(QMainWindow):
         # 最大最小値の表示が不要なため、この関数は空にします
         pass
 
-    def mouse_moved(self, evt):
-        """マウス移動時の処理（最適化版）"""
+    def mouse_moved(self, pos):
+        """マウス移動時の処理（軽量化版）"""
         # データが読み込まれていない場合は何もしない
         if len(self.spectra) == 0:
             return
 
-        pos = evt[0]  # マウスのグラフ上の位置を取得
-        if self.plot_widget.sceneBoundingRect().contains(pos):
-            # マウス位置をデータ座標に変換
-            view_box = self.plot_widget.getViewBox()
-            if view_box:
-                mouse_point = view_box.mapSceneToView(pos)
-                mouse_x = mouse_point.x()
-            else:
-                return
+        # マウス位置がグラフ内にあるかチェック
+        if not self.plot_widget.sceneBoundingRect().contains(pos):
+            return
 
-            # 前回と同じ位置なら処理をスキップ（超高速化）
-            if (
-                self.last_mouse_x is not None
-                and abs(mouse_x - self.last_mouse_x) < 0.001
-            ):
-                return
-            self.last_mouse_x = mouse_x
+        # マウス位置をデータ座標に変換
+        view_box = self.plot_widget.getViewBox()
+        if not view_box:
+            return
 
-            # 最初のスペクトルを基準にカーソル位置を表示
-            wavelengths = self.spectra[0]["wavelengths"]
+        mouse_point = view_box.mapSceneToView(pos)
+        mouse_x = mouse_point.x()
+        mouse_y = mouse_point.y()
 
-            # キャッシュされた範囲チェック（高速化）
-            w_min, w_max = self.wavelength_cache[0]
-            if mouse_x < w_min or mouse_x > w_max:
-                return
+        # 十字カーソルの位置を更新（垂直線と水平線）
+        self.vLine.setPos(mouse_x)
+        self.hLine.setPos(mouse_y)
 
-            # numpy配列を使用した超高速検索（searchsortedを使用）
-            closest_idx = np.searchsorted(wavelengths, mouse_x)
-            # 境界チェック
-            if closest_idx >= len(wavelengths):
-                closest_idx = len(wavelengths) - 1
-            elif closest_idx > 0:
-                # 左右どちらが近いか確認
-                if abs(wavelengths[closest_idx - 1] - mouse_x) < abs(
-                    wavelengths[closest_idx] - mouse_x
-                ):
-                    closest_idx -= 1
+        # スペクトル上のポイント表示を無効化（何も表示しない）
+        self.cursorPoint.setData([], [])
 
-            x = wavelengths[closest_idx]
-            y = self.spectra[0]["reflectances"][closest_idx]
-
-            # 垂直線の位置をスペクトル上のポイントに更新
-            self.vLine.setPos(x)
-            # スペクトル上のポイントをハイライト
-            self.cursorPoint.setData([x], [y])
-
-            # テキスト表示を更新（複数スペクトルの値を表示）
-            text_lines = [f"Wavelength: {x:.5f} μm"]
-            for i, spectrum in enumerate(self.spectra):
-                wavelengths_spec = spectrum["wavelengths"]
-                filename = spectrum["filename"]
-
-                # キャッシュされた範囲チェック（高速化）
-                w_min, w_max = self.wavelength_cache[i]
-                if x >= w_min and x <= w_max:
-                    # searchsortedで高速検索
-                    idx = np.searchsorted(wavelengths_spec, x)
-                    if idx >= len(wavelengths_spec):
-                        idx = len(wavelengths_spec) - 1
-                    elif idx > 0:
-                        if abs(wavelengths_spec[idx - 1] - x) < abs(
-                            wavelengths_spec[idx] - x
-                        ):
-                            idx -= 1
-
-                    y_spec = spectrum["reflectances"][idx]
-                    text_lines.append(f"{filename}: {y_spec:.5f}")
-
-            self.cursor_text.setText("\n".join(text_lines))
+        # 右上にはマウス位置の波長と反射率を表示
+        self.cursor_text.setText(
+            f"Wavelength: {mouse_x:.5f} μm\nReflectance: {mouse_y:.5f}"
+        )
 
     def on_view_range_changed(self, view_box):
         """ビューの範囲が変更された時（ズーム時）の処理"""
@@ -663,9 +614,6 @@ class SpectralViewer(QMainWindow):
         self.vLine.setPos(-1000)
         self.cursorPoint.setData([], [])
         self.cursor_text.setText("")
-
-        # タイトルをリセット
-        self.plot_widget.setTitle("Reflectance Spectrum", color="#000", size="18pt")
 
         self.statusBar.showMessage("全てのスペクトルをクリアしました")
 
