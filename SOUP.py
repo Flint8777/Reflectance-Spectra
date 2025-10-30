@@ -31,9 +31,23 @@ class SpectralViewer(QMainWindow):
         self.setWindowTitle("FT-IRスペクトルビューアー")
         self.setGeometry(100, 100, 1200, 800)
 
-        # データ保存用の変数
-        self.df = None
-        self.filename = None
+        # データ保存用の変数（複数スペクトル対応）
+        self.spectra = (
+            []
+        )  # [{df: DataFrame, filename: str, color: tuple, curve: PlotDataItem}]
+        self.color_palette = [
+            (0, 0, 255),  # 青
+            (255, 0, 0),  # 赤
+            (0, 150, 0),  # 緑
+            (255, 140, 0),  # オレンジ
+            (148, 0, 211),  # 紫
+            (0, 191, 255),  # 水色
+            (255, 20, 147),  # ピンク
+            (128, 128, 0),  # オリーブ
+            (0, 128, 128),  # ティール
+            (128, 0, 0),  # マルーン
+        ]
+        self.next_color_index = 0
 
         # UIのセットアップ
         self.setup_ui()
@@ -134,12 +148,17 @@ class SpectralViewer(QMainWindow):
         control_layout = QHBoxLayout()
 
         # ファイル選択ボタン
-        self.open_button = QPushButton("ファイルを開く")
+        self.open_button = QPushButton("ファイルを追加")
         self.open_button.clicked.connect(self.open_file)
         control_layout.addWidget(self.open_button)
 
-        # ファイル名ラベル
-        self.file_label = QLabel("ファイル: なし")
+        # 全てクリアボタン
+        self.clear_button = QPushButton("全てクリア")
+        self.clear_button.clicked.connect(self.clear_all)
+        control_layout.addWidget(self.clear_button)
+
+        # ファイル数ラベル
+        self.file_label = QLabel("読込数: 0")
         control_layout.addWidget(self.file_label)
 
         # ズーム操作説明ラベル
@@ -170,14 +189,33 @@ class SpectralViewer(QMainWindow):
         if file_path:
             try:
                 # データ読み込み
-                self.df = self.load_spectrum_file(file_path)
-                self.filename = os.path.basename(file_path)
-                self.file_label.setText(f"ファイル: {self.filename}")
+                df = self.load_spectrum_file(file_path)
+                filename = os.path.basename(file_path)
+
+                # 色を割り当て
+                color = self.color_palette[
+                    self.next_color_index % len(self.color_palette)
+                ]
+                self.next_color_index += 1
+
+                # スペクトルデータを追加
+                spectrum_data = {
+                    "df": df,
+                    "filename": filename,
+                    "color": color,
+                    "curve": None,  # プロット時に設定
+                }
+                self.spectra.append(spectrum_data)
+
+                # ファイル数を更新
+                self.file_label.setText(f"読込数: {len(self.spectra)}")
 
                 # プロットを更新
                 self.plot_data()
 
-                self.statusBar.showMessage(f"ファイルを読み込みました: {self.filename}")
+                self.statusBar.showMessage(
+                    f"ファイルを読み込みました: {filename} (全{len(self.spectra)}件)"
+                )
             except Exception as e:
                 self.statusBar.showMessage(f"エラー: {str(e)}")
 
@@ -215,7 +253,7 @@ class SpectralViewer(QMainWindow):
 
     def plot_data(self):
         """データをプロットする"""
-        if self.df is None or len(self.df) == 0:
+        if len(self.spectra) == 0:
             return
 
         # プロット領域をクリア
@@ -229,25 +267,39 @@ class SpectralViewer(QMainWindow):
         # テキストアイテムを右上に配置
         self.cursor_text.setPos(1, 1)
 
-        # メインのスペクトルプロット
-        main_pen = pg.mkPen(color=(0, 0, 255), width=1.5)
-        self.main_curve = self.plot_widget.plot(
-            self.df["Wavelength"],
-            self.df["Reflectance"],
-            pen=main_pen,
-            name="Spectrum",
-        )
+        # 全てのスペクトルをプロット
+        for spectrum in self.spectra:
+            df = spectrum["df"]
+            color = spectrum["color"]
+            filename = spectrum["filename"]
 
-        # 極大値と極小値の検出は無効化済み
-        # self.detect_and_plot_extrema()
+            # スペクトルプロット
+            pen = pg.mkPen(color=color, width=1.5)
+            curve = self.plot_widget.plot(
+                df["Wavelength"],
+                df["Reflectance"],
+                pen=pen,
+                name=filename,
+            )
+            spectrum["curve"] = curve
 
-        # グラフのタイトルを更新（サイズアップして太字に）
+        # グラフのタイトルを更新
+        if len(self.spectra) == 1:
+            title = f"Reflectance Spectrum: {self.spectra[0]['filename']}"
+        else:
+            title = f"Reflectance Spectra ({len(self.spectra)} files)"
+
         self.plot_widget.setTitle(
-            f"Reflectance Spectrum: {self.filename}",
+            title,
             color="#000",
             size="18pt",
             bold=True,
         )
+
+        # レジェンドを追加（複数スペクトルの場合）
+        if len(self.spectra) > 1:
+            legend = self.plot_widget.addLegend()
+            legend.setBrush(QBrush(QColor(255, 255, 255, 200)))
 
         # スペクトル表示後に適切なズーム倍率に自動調整
         self.adjust_zoom_to_data()
@@ -265,7 +317,7 @@ class SpectralViewer(QMainWindow):
     def mouse_moved(self, evt):
         """マウス移動時の処理"""
         # データが読み込まれていない場合は何もしない
-        if self.df is None or len(self.df) == 0:
+        if len(self.spectra) == 0:
             return
 
         pos = evt[0]  # マウスのグラフ上の位置を取得
@@ -278,30 +330,39 @@ class SpectralViewer(QMainWindow):
             else:
                 return
 
+            # 最初のスペクトルを基準にカーソル位置を表示
+            df = self.spectra[0]["df"]
+
             # スペクトル上の最も近いポイントを探す
-            if (
-                mouse_x >= self.df["Wavelength"].min()
-                and mouse_x <= self.df["Wavelength"].max()
-            ):
+            if mouse_x >= df["Wavelength"].min() and mouse_x <= df["Wavelength"].max():
                 # 最も近い波長のインデックスを取得
-                closest_idx = (self.df["Wavelength"] - mouse_x).abs().idxmin()
-                x = self.df.loc[closest_idx, "Wavelength"]
-                y = self.df.loc[closest_idx, "Reflectance"]
+                closest_idx = (df["Wavelength"] - mouse_x).abs().idxmin()
+                x = df.loc[closest_idx, "Wavelength"]
+                y = df.loc[closest_idx, "Reflectance"]
 
                 # 垂直線の位置をスペクトル上のポイントに更新
                 self.vLine.setPos(x)
                 # スペクトル上のポイントをハイライト
                 self.cursorPoint.setData([x], [y])
 
-                # テキスト表示を更新（位置はそのまま右上に固定）
-                self.cursor_text.setText(
-                    f"Wavelength: {x:.5f} μm, Reflectance: {y:.5f}"
-                )
+                # テキスト表示を更新（複数スペクトルの値を表示）
+                text_lines = [f"Wavelength: {x:.5f} μm"]
+                for i, spectrum in enumerate(self.spectra):
+                    df_spec = spectrum["df"]
+                    filename = spectrum["filename"]
+                    # 該当する波長の値を取得
+                    if (
+                        x >= df_spec["Wavelength"].min()
+                        and x <= df_spec["Wavelength"].max()
+                    ):
+                        idx = (df_spec["Wavelength"] - x).abs().idxmin()
+                        y_spec = df_spec.loc[idx, "Reflectance"]
+                        text_lines.append(f"{filename}: {y_spec:.5f}")
+
+                self.cursor_text.setText("\n".join(text_lines))
 
                 # ステータスバーも更新
-                self.statusBar.showMessage(
-                    f"Wavelength: {x:.5f} μm, Reflectance: {y:.5f}"
-                )
+                self.statusBar.showMessage(f"Wavelength: {x:.5f} μm")
 
     def on_view_range_changed(self, view_box):
         """ビューの範囲が変更された時（ズーム時）の処理"""
@@ -314,19 +375,26 @@ class SpectralViewer(QMainWindow):
         self.cursor_text.setPos(x_max, y_max)
 
         # データがない場合、テキストは空にする
-        if self.df is None or len(self.df) == 0:
+        if len(self.spectra) == 0:
             self.cursor_text.setText("")
 
     def adjust_zoom_to_data(self):
         """データに基づいて最適なズーム範囲に調整"""
-        if self.df is None or len(self.df) == 0:
+        if len(self.spectra) == 0:
             return
 
-        # データの範囲を取得
-        x_min = self.df["Wavelength"].min()
-        x_max = self.df["Wavelength"].max()
-        y_min = self.df["Reflectance"].min()
-        y_max = self.df["Reflectance"].max()
+        # 全スペクトルの範囲を取得
+        x_min = float("inf")
+        x_max = float("-inf")
+        y_min = float("inf")
+        y_max = float("-inf")
+
+        for spectrum in self.spectra:
+            df = spectrum["df"]
+            x_min = min(x_min, df["Wavelength"].min())
+            x_max = max(x_max, df["Wavelength"].max())
+            y_min = min(y_min, df["Reflectance"].min())
+            y_max = max(y_max, df["Reflectance"].max())
 
         # 余白を追加（データの範囲の5%）
         x_padding = (x_max - x_min) * 0.05
@@ -348,11 +416,35 @@ class SpectralViewer(QMainWindow):
 
     def reset_zoom(self):
         """ズームをリセットして全体を表示"""
-        if self.df is not None and len(self.df) > 0:
+        if len(self.spectra) > 0:
             # 全体表示ではなく、データに最適化された表示範囲にリセット
             self.adjust_zoom_to_data()
             self.statusBar.showMessage("Zoom Reset")
             # テキストアイテムの位置は on_view_range_changed で更新される
+
+    def clear_all(self):
+        """全てのスペクトルをクリア"""
+        self.spectra = []
+        self.next_color_index = 0
+        self.file_label.setText("読込数: 0")
+
+        # グラフをクリア
+        self.plot_widget.clear()
+
+        # カーソルとテキストアイテムを再追加
+        self.plot_widget.addItem(self.vLine)
+        self.plot_widget.addItem(self.cursorPoint)
+        self.plot_widget.addItem(self.cursor_text)
+
+        # カーソルを非表示位置に
+        self.vLine.setPos(-1000)
+        self.cursorPoint.setData([], [])
+        self.cursor_text.setText("")
+
+        # タイトルをリセット
+        self.plot_widget.setTitle("Reflectance Spectrum", color="#000", size="18pt")
+
+        self.statusBar.showMessage("全てのスペクトルをクリアしました")
 
 
 def main():
