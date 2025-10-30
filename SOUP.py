@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 from scipy.signal import find_peaks
+import time
 
 # 個別にモジュールをインポート
 from PyQt5.QtWidgets import (
@@ -56,6 +57,7 @@ class SpectralViewer(QMainWindow):
         # キャッシュ用の変数（高速化）
         self.wavelength_cache = {}  # {spectrum_index: (min, max)}
         self.last_mouse_x = None  # 前回のマウス位置をキャッシュ
+        self._last_mouse_update = None  # マウス更新のスロットリング用
 
         # UIのセットアップ
         self.setup_ui()
@@ -133,7 +135,9 @@ class SpectralViewer(QMainWindow):
 
     def setup_graph(self):
         # グラフウィジェットのスタイル設定
-        pg.setConfigOptions(antialias=True)  # アンチエイリアスを有効化
+        pg.setConfigOptions(
+            antialias=False
+        )  # パフォーマンス優先でアンチエイリアス無効化
         # OpenGLは互換性の問題があるため無効化
         # pg.setConfigOptions(useOpenGL=True)
 
@@ -141,6 +145,12 @@ class SpectralViewer(QMainWindow):
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setBackground("w")  # 白背景
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        # グラフエリアではマウスポインタを非表示（クロスヘアのみ表示）
+        try:
+            self.plot_widget.viewport().setCursor(Qt.BlankCursor)
+        except Exception:
+            # フォールバック
+            self.plot_widget.setCursor(Qt.BlankCursor)
 
         # 矩形選択ズーム機能の設定
         self.plot_widget.setMouseEnabled(x=True, y=True)  # X軸とY軸の両方で移動可能
@@ -180,21 +190,21 @@ class SpectralViewer(QMainWindow):
         view_range = self.plot_widget.getViewBox().viewRange()
         self.cursor_text.setPos(view_range[0][1], view_range[1][1])
 
-        # カーソル垂直線（十字の縦線）
+        # 十字カーソルの線を作成
         self.vLine = pg.InfiniteLine(
-            angle=90, movable=False, pen=pg.mkPen("r", width=1)
+            angle=90, movable=False, pen=pg.mkPen("r", width=1, cosmetic=True)
+        )
+        self.hLine = pg.InfiniteLine(
+            angle=0, movable=False, pen=pg.mkPen("r", width=1, cosmetic=True)
         )
         self.plot_widget.addItem(self.vLine)
-
-        # カーソル水平線（十字の横線）
-        self.hLine = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen("r", width=1))
         self.plot_widget.addItem(self.hLine)
 
         # 初期状態では見えない位置に配置（データがない状態）
         self.vLine.setPos(-1000)
         self.hLine.setPos(-1000)
 
-        # スペクトル上のポイントをハイライトするためのスキャッターポイント
+        # スペクトル上のポイントをハイライトするためのスキャッターポイント（現在は未使用）
         self.cursorPoint = pg.ScatterPlotItem(
             size=10, pen=pg.mkPen("r", width=2), brush=pg.mkBrush("r"), symbol="o"
         )
@@ -203,9 +213,12 @@ class SpectralViewer(QMainWindow):
         # 初期状態では何も表示しない（空のデータセット）
         self.cursorPoint.setData([], [])
 
-        # マウスイベントを直接接続（SignalProxyを使わず最速に）
-        # SignalProxyによる遅延をなくして即座に反応
-        self.plot_widget.scene().sigMouseMoved.connect(self.mouse_moved)
+        # 高速かつ過負荷防止のため、SignalProxyでレート制限しつつ薄いラッパーを介して処理
+        self._mouse_proxy = pg.SignalProxy(
+            self.plot_widget.scene().sigMouseMoved,
+            rateLimit=120,
+            slot=self._on_scene_mouse_moved,
+        )
 
         # ビューボックスの範囲変更イベントを監視（ズーム時に座標表示位置を更新）
         view_box = self.plot_widget.getViewBox()
@@ -487,6 +500,13 @@ class SpectralViewer(QMainWindow):
         # 最大最小値の表示が不要なため、この関数は空にします
         pass
 
+    def _on_scene_mouse_moved(self, evt):
+        """Scene の sigMouseMoved からのラッパー。pos を取り出して mouse_moved に委譲"""
+        if not evt or len(evt) == 0:
+            return
+        pos = evt[0]
+        self.mouse_moved(pos)
+
     def mouse_moved(self, pos):
         """マウス移動時の処理（軽量化版）"""
         # データが読み込まれていない場合は何もしない
@@ -496,6 +516,14 @@ class SpectralViewer(QMainWindow):
         # マウス位置がグラフ内にあるかチェック
         if not self.plot_widget.sceneBoundingRect().contains(pos):
             return
+
+        # 時間ベースのスロットリング（最大120Hz）
+        now = time.perf_counter()
+        if self._last_mouse_update is not None and (now - self._last_mouse_update) < (
+            1.0 / 120.0
+        ):
+            return
+        self._last_mouse_update = now
 
         # マウス位置をデータ座標に変換
         view_box = self.plot_widget.getViewBox()
