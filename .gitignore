@@ -1,0 +1,50 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# VS Code / IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+
+# Node / Web (web-viewer)
+web-viewer/node_modules/
+web-viewer/dist/
+web-viewer/.vite/
+web-viewer/.cache/
+web-viewer/coverage/
+web-viewer/tmp/
+web-viewer/out/
+
+# Electron build outputs (do not commit installers/binaries)
+web-viewer/dist-electron/
+
+# Local env files
+.env
+.env.*
+web-viewer/.env
+web-viewer/.env.*
+
+# Shortcuts / miscellaneous
+*.lnk
