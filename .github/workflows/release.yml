@@ -1,4 +1,4 @@
-name: Release macOS build (x64 & arm64)
+name: Release builds (Windows & macOS)
 
 on:
   push:
@@ -10,6 +10,53 @@ permissions:
   contents: write
 
 jobs:
+  build-windows:
+    name: Build Windows portable zip
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\npm-cache
+          key: ${{ runner.os }}-node-${{ hashFiles('Release/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        working-directory: Release
+        run: npm ci
+
+      - name: Build Windows portable
+        working-directory: Release
+        run: |
+          npm run electron:build:win
+          npm run pack:zip
+
+      - name: Upload artifacts (manual run only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable-dist
+          path: Release/dist-electron/*.zip
+
+      - name: Publish GitHub Release assets (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Release/dist-electron/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-macos:
     name: Build macOS (${{ matrix.arch }}) dmg/zip
     strategy:
@@ -36,16 +83,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('web-viewer/package-lock.json') }}
+          key: ${{ runner.os }}-node-${{ hashFiles('Release/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-node-
 
       - name: Install dependencies
-        working-directory: web-viewer
+        working-directory: Release
         run: npm ci
 
       - name: Build macOS app (dmg/zip)
-        working-directory: web-viewer
+        working-directory: Release
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
@@ -68,12 +115,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-${{ matrix.arch }}-dist
-          path: web-viewer/dist-electron/renamed/*
+          path: Release/dist-electron/renamed/*
 
       - name: Publish GitHub Release assets (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: web-viewer/dist-electron/renamed/*
+          files: Release/dist-electron/renamed/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
