@@ -50,11 +50,18 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           echo Building for ${{ matrix.arch }}
-          # electron-builder selects host arch automatically; rename outputs for clarity
           npm run electron:build:mac
-          mkdir -p web-viewer/dist-electron/renamed
-          for f in web-viewer/dist-electron/*.dmg; do mv "$f" "web-viewer/dist-electron/renamed/${f##*/}-${{ matrix.arch }}.dmg"; done
-          for f in web-viewer/dist-electron/*.zip; do mv "$f" "web-viewer/dist-electron/renamed/${f##*/}-${{ matrix.arch }}.zip"; done
+          mkdir -p dist-electron/renamed
+          for f in dist-electron/*.dmg; do 
+            base="${f##*/}"
+            base="${base%.dmg}"
+            mv "$f" "dist-electron/renamed/${base}-${{ matrix.arch }}.dmg"
+          done
+          for f in dist-electron/*.zip; do 
+            base="${f##*/}"
+            base="${base%.zip}"
+            mv "$f" "dist-electron/renamed/${base}-${{ matrix.arch }}.zip"
+          done
 
       - name: Upload artifacts (manual run only)
         if: ${{ github.event_name == 'workflow_dispatch' }}
