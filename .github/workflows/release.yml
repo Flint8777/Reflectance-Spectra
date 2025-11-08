@@ -24,9 +24,9 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
+      - name: Install dependencies (no optional)
         working-directory: Release
-        run: npm install
+        run: npm install --no-optional
 
       - name: Build Windows portable
         working-directory: Release
