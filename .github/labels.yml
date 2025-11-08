@@ -1,0 +1,42 @@
+# ラベル定義 (sync 用)
+# 利用: github-label-sync など、または独自 workflow で同期
+
+- name: bug
+  color: d73a4a
+  description: 不具合
+- name: enhancement
+  color: a2eeef
+  description: 機能追加・改善
+- name: discussion
+  color: 5319e7
+  description: 議論が必要
+- name: documentation
+  color: 0075ca
+  description: ドキュメント
+- name: performance
+  color: fbca04
+  description: パフォーマンス関連
+- name: security
+  color: ee0701
+  description: セキュリティ関連
+- name: test
+  color: 0e8a16
+  description: テスト関連
+- name: help wanted
+  color: 008672
+  description: 助けが必要
+- name: good first issue
+  color: 7057ff
+  description: 初心者向け
+- name: wontfix
+  color: ffffff
+  description: 対応しない予定
+- name: invalid
+  color: e4e669
+  description: 無効
+- name: duplicate
+  color: cfd3d7
+  description: 重複
+- name: triage
+  color: 9e5d0d
+  description: 優先度/分類待ち

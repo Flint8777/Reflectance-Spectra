@@ -1,0 +1,30 @@
+name: TODO to Issue
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  todo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create issues from TODOs
+        uses: alstr/todo-to-issue-action@v4
+        with:
+          AUTO_ASSIGN: true
+          REPO: ${{ github.repository }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          LABEL: triage
+          CLOSE_ISSUES: true
+          COMMENT_ON_ISSUES: false
+          IDENTIFIERS: |
+            TODO
+            FIXME

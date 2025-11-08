@@ -1,0 +1,46 @@
+name: "✨ Feature request"
+description: "新機能・改善の提案"
+title: "[feat] <短い要約>"
+labels: ["enhancement", "discussion"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        新しいアイデアを歓迎します！まずは課題の背景を共有してください。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 背景 / 解決したい問題
+      description: なぜこの機能が必要か。現状の課題は何か。
+      placeholder: 例) 大量ファイルを開くと並列処理ができない
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 提案する解決方法
+      description: UI/操作/内部処理の案があれば具体的に。
+      placeholder: 例) ファイル読込をワーカースレッド化し進捗バーを表示
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 代替案
+      description: 他に検討した方法があれば
+  - type: textarea
+    id: impact
+    attributes:
+      label: 利点 / インパクト
+      placeholder: ユーザー体験や性能への効果
+  - type: textarea
+    id: risks
+    attributes:
+      label: 想定リスク
+      placeholder: 互換性、パフォーマンス悪化等
+  - type: textarea
+    id: extra
+    attributes:
+      label: 補足情報
+      placeholder: 参考リンク、スクリーンショット、類似アプリ 等

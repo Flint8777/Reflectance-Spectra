@@ -1,0 +1,63 @@
+name: "🐛 Bug report"
+description: "不具合の報告"
+title: "[bug] <概要を一言で>"
+labels: ["bug", "triage"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        できるだけ再現手順と環境情報の記載をお願いします。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 概要
+      description: 何が起こっているか、何を期待したかを簡潔に。
+      placeholder: 例) ファイルを開くと描画が固まる
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順
+      description: 最小の手順で問題を再現できるように記載してください。
+      placeholder: |
+        1. [ ] アプリを起動
+        2. [ ] メニューから ...
+        3. [ ] 〜を実行
+        4. [ ] エラー発生
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待結果
+      placeholder: どう振る舞ってほしかったか
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の結果 / ログ
+      placeholder: エラーメッセージやログ、スクリーンショット等
+  - type: input
+    id: version
+    attributes:
+      label: アプリのバージョン
+      description: タグ名またはアプリのAboutに表示されるバージョン
+      placeholder: 例) v2.1.9
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Windows 10
+        - Windows 11
+        - macOS (Intel)
+        - macOS (Apple Silicon)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: 補足情報
+      placeholder: ネットワーク環境、特殊設定、外部機器 等

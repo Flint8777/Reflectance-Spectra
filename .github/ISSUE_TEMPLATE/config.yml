@@ -1,0 +1,6 @@
+blank_issues_enabled: false
+yaml_version: 1
+contact_links:
+  - name: 質問・一般的な相談 (Q&A)
+    url: https://github.com/Flint8777/Reflectance-Spectra/discussions
+    about: 使い方や仕様に関する質問はこちら
