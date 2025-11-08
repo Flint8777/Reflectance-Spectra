@@ -24,9 +24,17 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies (no optional)
+      - name: Install dependencies
         working-directory: Release
-        run: npm install --no-optional
+        run: npm install
+
+      - name: Ensure Rollup native binary (Windows)
+        working-directory: Release
+        shell: bash
+        run: |
+          VER=$(node -p "require('rollup/package.json').version")
+          echo "Installing @rollup/rollup-win32-x64-msvc@${VER}"
+          npm i -D @rollup/rollup-win32-x64-msvc@"${VER}"
 
       - name: Build Windows portable
         working-directory: Release
