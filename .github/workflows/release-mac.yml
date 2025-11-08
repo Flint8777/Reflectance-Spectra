@@ -1,0 +1,79 @@
+name: Release macOS build (x64 & arm64)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS (${{ matrix.arch }}) dmg/zip
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13 # Intel x64
+            arch: x64
+          - runner: macos-14 # Apple Silicon arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('web-viewer/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install dependencies
+        working-directory: web-viewer
+        run: npm ci
+
+      - name: Build macOS app (dmg/zip)
+        working-directory: web-viewer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          echo Building for ${{ matrix.arch }}
+          npm run electron:build:mac
+          mkdir -p dist-electron/renamed
+          for f in dist-electron/*.dmg; do 
+            base="${f##*/}"
+            base="${base%.dmg}"
+            mv "$f" "dist-electron/renamed/${base}-${{ matrix.arch }}.dmg"
+          done
+          for f in dist-electron/*.zip; do 
+            base="${f##*/}"
+            base="${base%.zip}"
+            mv "$f" "dist-electron/renamed/${base}-${{ matrix.arch }}.zip"
+          done
+
+      - name: Upload artifacts (manual run only)
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-${{ matrix.arch }}-dist
+          path: web-viewer/dist-electron/renamed/*
+
+      - name: Publish GitHub Release assets (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: web-viewer/dist-electron/renamed/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
