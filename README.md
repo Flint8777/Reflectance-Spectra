@@ -90,5 +90,7 @@ MIT License
 - macOS 自動ビルド（CI）追加
 
 ### 以前のバージョン（Prototype）
-
+git checkout main
+git pull origin maingit checkout main
+git pull origin main
 - Python + PyQt5 版（v1.x）は `ver-1.1.0` ブランチを参照
