@@ -1,4 +1,4 @@
-name: Release macOS build
+name: Release macOS build (x64 & arm64)
 
 on:
   push:
@@ -11,8 +11,16 @@ permissions:
 
 jobs:
   build-macos:
-    name: Build macOS app (dmg/zip)
-    runs-on: macos-latest
+    name: Build macOS (${{ matrix.arch }}) dmg/zip
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13 # Intel x64
+            arch: x64
+          - runner: macos-14 # Apple Silicon arm64
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,23 +46,27 @@ jobs:
 
       - name: Build macOS app (dmg/zip)
         working-directory: web-viewer
-        run: npm run electron:build:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          echo Building for ${{ matrix.arch }}
+          # electron-builder selects host arch automatically; rename outputs for clarity
+          npm run electron:build:mac
+          mkdir -p web-viewer/dist-electron/renamed
+          for f in web-viewer/dist-electron/*.dmg; do mv "$f" "web-viewer/dist-electron/renamed/${f##*/}-${{ matrix.arch }}.dmg"; done
+          for f in web-viewer/dist-electron/*.zip; do mv "$f" "web-viewer/dist-electron/renamed/${f##*/}-${{ matrix.arch }}.zip"; done
 
-      - name: Upload artifacts (CI run)
+      - name: Upload artifacts (manual run only)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v4
         with:
-          name: mac-dist-electron
-          path: |
-            web-viewer/dist-electron/*.dmg
-            web-viewer/dist-electron/*.zip
+          name: mac-${{ matrix.arch }}-dist
+          path: web-viewer/dist-electron/renamed/*
 
       - name: Publish GitHub Release assets (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            web-viewer/dist-electron/*.dmg
-            web-viewer/dist-electron/*.zip
+          files: web-viewer/dist-electron/renamed/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
