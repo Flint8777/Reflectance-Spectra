@@ -28,17 +28,22 @@ __pycache__/
 venv/
 env/
 
-# Node / Web (web-viewer)
-web-viewer/node_modules/
-web-viewer/dist/
-web-viewer/.vite/
-web-viewer/.cache/
-web-viewer/coverage/
-web-viewer/tmp/
-web-viewer/out/
+# Node / Web (Release)
+Release/node_modules/
+Release/dist/
+Release/dist-electron/
+Release/.vite/
+Release/.cache/
+Release/coverage/
+Release/tmp/
+Release/out/
 
-# Electron build outputs (do not commit installers/binaries)
-web-viewer/dist-electron/
+# Build outputs (general pattern - do not commit installers/binaries)
+dist*/
+*.zip
+*.exe
+*.dmg
+*.AppImage
 
 # Local env files
 .env

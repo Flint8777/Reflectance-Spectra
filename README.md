@@ -59,16 +59,26 @@ macOSでは「開発元が未確認」の警告が表示されます。
 
 ## 開発者向け
 
-ソースからビルドする場合:
+### ソースからビルドする場合
 
 ```bash
 git clone https://github.com/Flint8777/Reflectance-Spectra.git
-cd Reflectance-Spectra/web-viewer
+cd Reflectance-Spectra/Release
 npm install
 npm run build
 npm run electron:build:win  # Windows
 npm run electron:build:mac  # macOS
 ```
+
+### 配布用ZIPの作成
+
+```bash
+cd Release
+npm run electron:build:win  # ビルド実行
+npm run pack:zip             # ZIP化（Windowsのみ）
+```
+
+生成物: `Release/dist-electron/Reflectance-Spectra-Viewer-portable.zip`
 
 ### 技術スタック
 
