@@ -80,16 +80,12 @@ npm run pack:zip             # ZIP化（Windowsのみ）
 
 生成物: `Release/dist-electron/Reflectance-Spectra-Viewer-portable.zip`
 
-### 技術スタック
+### 使った技術スタック
 
 - Electron 28
 - React 18
 - Plotly.js (WebGL)
 - Vite 5
-
-## ライセンス
-
-MIT License
 
 ## 変更履歴
 
