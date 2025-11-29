@@ -409,7 +409,7 @@ export default function App() {
 // XML から TAB ファイル名と Wavelength/Reflectance の field_location/field_length, records を抽出
 function extractRelabMeta(xmlText) {
     // <file_name>something.tab</file_name>
-    const fileNameMatch = xmlText.match(/<file_name>([^<]+)</file_name>/i)
+    const fileNameMatch = xmlText.match(/<file_name>([^<]+)</file_name >/i)
     if (!fileNameMatch) throw new Error('file_name not found in XML')
     const tabFileName = fileNameMatch[1].trim()
 
