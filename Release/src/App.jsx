@@ -33,6 +33,8 @@ export default function App() {
     const [xRange, setXRange] = useState(null)
     const [yRange, setYRange] = useState(null)
     const [cross, setCross] = useState({ x: null, y: null }) // pixel position
+    // RELAB PDS4 メタ情報保持: tabファイル名(lowercase) -> { wlLoc, wlLen, rfLoc, rfLen, recordCount }
+    const [relabMeta, setRelabMeta] = useState({})
     const plotRef = useRef(null)
     const animFrame = useRef(0)
 
@@ -62,8 +64,11 @@ export default function App() {
 
         let colorIdx = traces.length % palette.length
 
-        const tasks = files.map((file, idx) => new Promise((resolve) => {
-            const ext = file.name.toLowerCase().split('.').pop()
+        const tasks = files.map((file) => new Promise((resolve) => {
+            const lowerName = file.name.toLowerCase()
+            const ext = lowerName.split('.').pop()
+
+            // 1) CSV
             if (ext === 'csv') {
                 Papa.parse(file, {
                     header: false,
@@ -76,9 +81,7 @@ export default function App() {
                             if (!row || row.length < 2) continue
                             const xv = Number(row[0])
                             const yv = Number(row[1])
-                            if (Number.isFinite(xv) && Number.isFinite(yv)) {
-                                x.push(xv); y.push(yv)
-                            }
+                            if (Number.isFinite(xv) && Number.isFinite(yv)) { x.push(xv); y.push(yv) }
                         }
                         newTraces.push({
                             x, y,
@@ -87,16 +90,59 @@ export default function App() {
                             line: { color: palette[colorIdx % palette.length], width: 1.5 },
                             name: file.name,
                         })
-                        newInfos.push(file.name)
-                        colorIdx++
+                        newInfos.push(file.name); colorIdx++
                         resolve()
                     }
                 })
-            } else {
-                // treat as DPT-like text
+                return
+            }
+
+            // 2) RELAB PDS4 XML ラベル
+            if (ext === 'xml') {
                 const reader = new FileReader()
                 reader.onload = () => {
-                    const { x, y } = parseDPT(String(reader.result))
+                    const xmlText = String(reader.result)
+                    try {
+                        const meta = extractRelabMeta(xmlText)
+                        if (meta && meta.tabFileName) {
+                            setRelabMeta(prev => ({ ...prev, [meta.tabFileName.toLowerCase()]: meta }))
+                        }
+                    } catch (err) {
+                        console.warn('RELAB XML parse failed:', err)
+                    }
+                    resolve() // XML自体はトレース追加しない
+                }
+                reader.readAsText(file)
+                return
+            }
+
+            // 3) RELAB TAB (固定幅) もしくは DPT-like fallback
+            if (ext === 'tab') {
+                const reader = new FileReader()
+                reader.onload = () => {
+                    const raw = String(reader.result)
+                    const meta = relabMeta[lowerName]
+                    let x = []
+                    let y = []
+                    if (meta) {
+                        try {
+                            const parsed = parseRelabTab(raw, meta)
+                            x = parsed.x; y = parsed.y
+                        } catch (err) {
+                            console.warn('RELAB TAB parse failed, fallback to whitespace parse:', err)
+                            const fallback = parseDPT(raw)
+                            x = fallback.x; y = fallback.y
+                        }
+                    } else {
+                        // XMLが無い場合は通常テキストパースへフォールバック
+                        const p = parseDPT(raw)
+                        x = p.x; y = p.y
+                    }
+                    // nm -> μm 推定変換: 平均値が 100 より大きければ nm とみなし 1000 で割る
+                    if (x.length > 0) {
+                        const avg = x.reduce((a, b) => a + b, 0) / x.length
+                        if (avg > 100) x = x.map(v => v / 1000)
+                    }
                     newTraces.push({
                         x, y,
                         type: 'scattergl',
@@ -104,12 +150,28 @@ export default function App() {
                         line: { color: palette[colorIdx % palette.length], width: 1.5 },
                         name: file.name,
                     })
-                    newInfos.push(file.name)
-                    colorIdx++
+                    newInfos.push(file.name); colorIdx++
                     resolve()
                 }
                 reader.readAsText(file)
+                return
             }
+
+            // 4) その他拡張子は DPT-like テキストとして扱う
+            const reader = new FileReader()
+            reader.onload = () => {
+                const { x, y } = parseDPT(String(reader.result))
+                newTraces.push({
+                    x, y,
+                    type: 'scattergl',
+                    mode: 'lines',
+                    line: { color: palette[colorIdx % palette.length], width: 1.5 },
+                    name: file.name,
+                })
+                newInfos.push(file.name); colorIdx++
+                resolve()
+            }
+            reader.readAsText(file)
         }))
 
         Promise.all(tasks).then(() => {
@@ -264,6 +326,12 @@ export default function App() {
                     onChange={handleFiles}
                     style={{ display: 'none' }}
                 />
+                {/* TODO: RELAB: XML→TAB の関連性をUI表示（XML読み込み済みメタ数など） */}
+                {Object.keys(relabMeta).length > 0 && (
+                    <div style={{ marginLeft: '12px', fontSize: '12px', color: '#444' }}>
+                        RELAB XML 読込: {Object.keys(relabMeta).length} 件
+                    </div>
+                )}
                 <button onClick={clearAll}>全てクリア</button>
                 <button onClick={resetZoom}>ズームリセット</button>
                 <div style={{ marginLeft: '12px', fontSize: '14px' }}>
@@ -335,4 +403,59 @@ export default function App() {
             </div>
         </div>
     )
+}
+
+// ===== RELAB パーサ補助関数 =====
+// XML から TAB ファイル名と Wavelength/Reflectance の field_location/field_length, records を抽出
+function extractRelabMeta(xmlText) {
+    // <file_name>something.tab</file_name>
+    const fileNameMatch = xmlText.match(/<file_name>([^<]+)</file_name>/i)
+    if (!fileNameMatch) throw new Error('file_name not found in XML')
+    const tabFileName = fileNameMatch[1].trim()
+
+    const recordsMatch = xmlText.match(/<records>(\d+)<\/records>/i)
+    const recordCount = recordsMatch ? Number(recordsMatch[1]) : null
+
+    // Regex to capture Field_Character blocks for Wavelength and Reflectance
+    const wlBlock = xmlText.match(/<Field_Character>[\s\S]*?<name>Wavelength<\/name>[\s\S]*?<field_location unit="byte">(\d+)<\/field_location>[\s\S]*?<field_length unit="byte">(\d+)<\/field_length>[\s\S]*?<\/Field_Character>/i)
+    const rfBlock = xmlText.match(/<Field_Character>[\s\S]*?<name>Reflectance<\/name>[\s\S]*?<field_location unit="byte">(\d+)<\/field_location>[\s\S]*?<field_length unit="byte">(\d+)<\/field_length>[\s\S]*?<\/Field_Character>/i)
+    if (!wlBlock || !rfBlock) throw new Error('Wavelength/Reflectance field definitions not found')
+
+    const wlLoc = Number(wlBlock[1]) - 1 // convert to 0-based
+    const wlLen = Number(wlBlock[2])
+    const rfLoc = Number(rfBlock[1]) - 1
+    const rfLen = Number(rfBlock[2])
+
+    return { tabFileName: tabFileName.toLowerCase(), wlLoc, wlLen, rfLoc, rfLen, recordCount }
+}
+
+function parseRelabTab(rawText, meta) {
+    const { wlLoc, wlLen, rfLoc, rfLen, recordCount } = meta
+    const norm = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+    const lines = norm.split('\n')
+    const x = []
+    const y = []
+    let headerSkipped = false
+    for (const ln of lines) {
+        if (!ln.trim()) continue
+        const stripped = ln.trim()
+        // レコード数行のスキップ
+        if (!headerSkipped && recordCount && /^\d+$/.test(stripped) && Number(stripped) === recordCount) {
+            headerSkipped = true
+            continue
+        }
+        // 英字開始行をメタ情報開始とみなし終了
+        if (/^[A-Za-z]/.test(stripped)) break
+        if (ln.length < Math.max(wlLoc + wlLen, rfLoc + rfLen)) continue
+        const wlStr = ln.slice(wlLoc, wlLoc + wlLen).trim()
+        const rfStr = ln.slice(rfLoc, rfLoc + rfLen).trim()
+        if (!wlStr || !rfStr) continue
+        const wlVal = Number(wlStr)
+        const rfVal = Number(rfStr)
+        if (!Number.isFinite(wlVal) || !Number.isFinite(rfVal)) continue
+        x.push(wlVal); y.push(rfVal)
+        if (recordCount && x.length >= recordCount) break
+    }
+    if (x.length === 0) throw new Error('No numeric data parsed from TAB')
+    return { x, y }
 }
