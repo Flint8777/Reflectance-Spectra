@@ -49,6 +49,9 @@ jobs:
       - name: Build Windows app (no publish)
         run: npm run electron:build:win -- --publish=never
 
+      - name: Pack portable ZIP
+        run: npm run pack:zip
+
       - name: Create portable zip name
         shell: pwsh
         run: |
@@ -116,19 +119,21 @@ jobs:
       - name: Rename macOS artifacts
         run: |
           mkdir -p dist-electron/renamed
+          # DMG rename (detect arch by filename)
           for f in dist-electron/*.dmg; do 
             base="${f##*/}"
-            version=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.dmg/\1/')
-            arch=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.dmg/\2/')
-            if [ -n "$version" ] && [ -n "$arch" ]; then
+            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-arm64)?\.dmg$/\1/')
+            if [[ "$base" == *"arm64"* ]]; then arch="arm64"; else arch="x64"; fi
+            if [ -n "$version" ]; then
               mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.dmg"
             fi
           done
+          # ZIP rename (repack app name inside zip)
           for f in dist-electron/*.zip; do 
             base="${f##*/}"
-            version=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.zip/\1/')
-            arch=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.zip/\2/')
-            if [ -n "$version" ] && [ -n "$arch" ]; then
+            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-mac(-arm64)?)?\.zip$/\1/')
+            if [[ "$base" == *"arm64"* ]]; then arch="arm64"; else arch="x64"; fi
+            if [ -n "$version" ]; then
               tmpdir="dist-electron/tmpzip_${arch}"
               rm -rf "$tmpdir"
               mkdir -p "$tmpdir"
@@ -159,6 +164,88 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  build-macos-arm64:
+    name: Build macOS (arm64) dmg/zip
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set version from tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          CLEAN="${TAG#v}"
+          echo "Setting package.json version to ${CLEAN} from tag ${TAG}"
+          node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Ensure Rollup native binary (macOS arm64)
+        run: |
+          VER=$(node -p "require('rollup/package.json').version")
+          echo "Installing @rollup/rollup-darwin-arm64@${VER}"
+          npm i -D @rollup/rollup-darwin-arm64@"${VER}"
+
+      - name: Build macOS app (no publish)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run electron:build:mac -- --publish=never
+
+      - name: Rename macOS artifacts (arm64)
+        run: |
+          mkdir -p dist-electron/renamed
+          for f in dist-electron/*.dmg; do 
+            base="${f##*/}"
+            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-arm64)?\.dmg$/\1/')
+            arch="arm64"
+            if [ -n "$version" ]; then
+              mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.dmg"
+            fi
+          done
+          for f in dist-electron/*.zip; do 
+            base="${f##*/}"
+            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-mac(-arm64)?)?\.zip$/\1/')
+            arch="arm64"
+            if [ -n "$version" ]; then
+              tmpdir="dist-electron/tmpzip_${arch}"
+              rm -rf "$tmpdir"
+              mkdir -p "$tmpdir"
+              unzip -q "$f" -d "$tmpdir"
+              appdir=$(find "$tmpdir" -maxdepth 1 -type d -name '*.app' | head -n1)
+              if [ -n "$appdir" ]; then
+                mv "$appdir" "$tmpdir/Reflectance-Spectra-Viewer.app"
+                (cd "$tmpdir" && zip -qry "../renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.zip" "Reflectance-Spectra-Viewer.app")
+                rm -rf "$tmpdir"
+                rm "$f"
+              fi
+            fi
+          done
+
+      - name: Upload macOS arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64-dist
+          path: dist-electron/renamed
+
+      - name: Attach macOS arm64 to Release (tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_arm64.dmg
+            dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_arm64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-web:
     name: Build web (Vite)
     runs-on: ubuntu-latest
@@ -180,8 +267,21 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Zip web dist with version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"; CLEAN="${TAG#v}"
+          zip -qry "web-dist-v${CLEAN}.zip" dist
+
       - name: Upload web dist
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
           path: dist
+
+      - name: Attach web dist ZIP to Release (tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: web-dist-v*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
