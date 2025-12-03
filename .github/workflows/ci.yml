@@ -26,6 +26,9 @@ jobs:
           rm -rf node_modules package-lock.json
           npm install
 
+      - name: Run unit tests
+        run: npm run test:run
+
       - name: Build
         run: npm run build
 
