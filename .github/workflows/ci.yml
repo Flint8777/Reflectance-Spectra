@@ -49,9 +49,10 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
+        shell: pwsh
         run: |
-          rmdir /s /q node_modules || exit /b 0
-          del /f /q package-lock.json || exit /b 0
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+          if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }
           npm install
 
       - name: Build app
