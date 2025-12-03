@@ -9,6 +9,14 @@ if (isDev) {
     process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
+// WebGL/ハードウェアアクセラレーション問題の回避
+// Plotly が WebGL を使う場合、一部環境で失敗するためソフトウェアレンダリングを強制
+// commandLine.appendSwitch は app.whenReady() より前に呼ぶ必要がある
+if (!isDev) {
+    app.commandLine.appendSwitch('disable-gpu')
+    app.commandLine.appendSwitch('disable-software-rasterizer', 'false')
+}
+
 function createWindow() {
 
     // package.jsonからversionを取得
