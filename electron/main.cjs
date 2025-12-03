@@ -9,19 +9,6 @@ if (isDev) {
     process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
-// WebGL/ハードウェアアクセラレーション問題の回避
-// Plotly が WebGL を使う場合、一部環境で失敗するためソフトウェアレンダリングを強制
-// commandLine.appendSwitch は app.whenReady() より前に呼ぶ必要がある
-if (!isDev) {
-    app.commandLine.appendSwitch('disable-gpu')
-    app.commandLine.appendSwitch('disable-gpu-compositing')
-    app.commandLine.appendSwitch('disable-software-rasterizer', 'false')
-    // WebGL を完全に無効化
-    app.commandLine.appendSwitch('disable-webgl')
-    app.commandLine.appendSwitch('disable-webgl2')
-    app.disableHardwareAcceleration()
-}
-
 function createWindow() {
 
     // package.jsonからversionを取得
@@ -42,9 +29,6 @@ function createWindow() {
             contextIsolation: true,
             // 本番では DevTools を無効化
             devTools: isDev,
-            // WebGL を完全に無効化してソフトウェアレンダリングを強制
-            offscreen: false,
-            enableWebSQL: false,
         },
         title: `Reflectance Spectra Viewer${version}`
     })
