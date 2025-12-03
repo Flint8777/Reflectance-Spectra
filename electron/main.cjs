@@ -14,7 +14,12 @@ if (isDev) {
 // commandLine.appendSwitch は app.whenReady() より前に呼ぶ必要がある
 if (!isDev) {
     app.commandLine.appendSwitch('disable-gpu')
+    app.commandLine.appendSwitch('disable-gpu-compositing')
     app.commandLine.appendSwitch('disable-software-rasterizer', 'false')
+    // WebGL を完全に無効化
+    app.commandLine.appendSwitch('disable-webgl')
+    app.commandLine.appendSwitch('disable-webgl2')
+    app.disableHardwareAcceleration()
 }
 
 function createWindow() {
@@ -37,6 +42,9 @@ function createWindow() {
             contextIsolation: true,
             // 本番では DevTools を無効化
             devTools: isDev,
+            // WebGL を完全に無効化してソフトウェアレンダリングを強制
+            offscreen: false,
+            enableWebSQL: false,
         },
         title: `Reflectance Spectra Viewer${version}`
     })
