@@ -165,59 +165,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: distname: Release builds (Windows & macOS)
-
-on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch: {}
-
-permissions:
-  contents: write
-  issues: write
-
-jobs:
-  build-windows:
-    name: Build Windows portable zip
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Inject version from tag (if tag)
-        if: startsWith(github.ref, 'refs/tags/')
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          CLEAN="${TAG#v}"
-          echo "Setting package.json version to ${CLEAN} from tag ${TAG}"
-          node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Ensure Rollup native binary (Windows)
-        shell: bash
-        run: |
-          VER=$(node -p "require('rollup/package.json').version")
-          echo "Installing @rollup/rollup-win32-x64-msvc@${VER}"
-          npm i -D @rollup/rollup-win32-x64-msvc@"${VER}"
-
-
-      - name: Build Windows portable
-        run: |
-          npm run electron:build:win
-          npm run pack:zip
-          # リネーム: Reflectance-Spectra-Viewer-v<version>_win.zip
-          for f in dist-electron/*.zip; do 
+          path: dist
             base="${f##*/}"
             version=$(echo "$base" | sed -E 's/.*-v([0-9.]+)-windows-portable.zip/\1/')
             if [ -n "$version" ]; then
