@@ -4,6 +4,173 @@ on:
   push:
     tags:
       - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows portable zip
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Set version from tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          CLEAN="${TAG#v}"
+          echo "Setting package.json version to ${CLEAN} from tag ${TAG}"
+          node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
+          if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }
+          npm install
+
+      - name: Ensure Rollup native binary (Windows)
+        shell: bash
+        run: |
+          VER=$(node -p "require('rollup/package.json').version")
+          echo "Installing @rollup/rollup-win32-x64-msvc@${VER}"
+          npm i -D @rollup/rollup-win32-x64-msvc@"${VER}"
+
+      - name: Build Windows app (no publish)
+        run: npm run electron:build:win -- --publish=never
+
+      - name: Create portable zip name
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path "dist-electron" -Filter "*.zip" -File
+          foreach ($f in $files) {
+            $m = ($f.Name | Select-String -Pattern "-v([0-9.]+)-windows-portable\.zip")
+            if ($m) {
+              $version = $m.Matches[0].Groups[1].Value
+              $newName = "Reflectance-Spectra-Viewer-v$version`_win.zip"
+              Rename-Item -Path $f.FullName -NewName $newName
+            }
+          }
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable-dist
+          path: dist-electron
+
+  build-macos-x64:
+    name: Build macOS (x64) dmg/zip
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set version from tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          CLEAN="${TAG#v}"
+          echo "Setting package.json version to ${CLEAN} from tag ${TAG}"
+          node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Ensure Rollup native binary (macOS x64)
+        run: |
+          VER=$(node -p "require('rollup/package.json').version")
+          echo "Installing @rollup/rollup-darwin-x64@${VER}"
+          npm i -D @rollup/rollup-darwin-x64@"${VER}"
+
+      - name: Build macOS app (no publish)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run electron:build:mac -- --publish=never
+
+      - name: Rename macOS artifacts
+        run: |
+          mkdir -p dist-electron/renamed
+          for f in dist-electron/*.dmg; do 
+            base="${f##*/}"
+            version=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.dmg/\1/')
+            arch=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.dmg/\2/')
+            if [ -n "$version" ] && [ -n "$arch" ]; then
+              mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.dmg"
+            fi
+          done
+          for f in dist-electron/*.zip; do 
+            base="${f##*/}"
+            version=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.zip/\1/')
+            arch=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.zip/\2/')
+            if [ -n "$version" ] && [ -n "$arch" ]; then
+              tmpdir="dist-electron/tmpzip_${arch}"
+              rm -rf "$tmpdir"
+              mkdir -p "$tmpdir"
+              unzip -q "$f" -d "$tmpdir"
+              appdir=$(find "$tmpdir" -maxdepth 1 -type d -name '*.app' | head -n1)
+              if [ -n "$appdir" ]; then
+                mv "$appdir" "$tmpdir/Reflectance-Spectra-Viewer.app"
+                (cd "$tmpdir" && zip -qry "../renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.zip" "Reflectance-Spectra-Viewer.app")
+                rm -rf "$tmpdir"
+                rm "$f"
+              fi
+            fi
+          done
+
+      - name: Upload macOS x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-x64-dist
+          path: dist-electron/renamed
+
+  build-web:
+    name: Build web (Vite)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload web dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: distname: Release builds (Windows & macOS)
+
+on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch: {}
 
 permissions:
