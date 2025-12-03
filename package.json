@@ -39,7 +39,7 @@
         "appId": "com.reflectance.spectra.viewer",
         "productName": "Reflectance Spectra Viewer",
         "icon": "electron/icons/icon.png",
-        "publish": "never",
+        
         "directories": {
             "output": "dist-electron"
         },

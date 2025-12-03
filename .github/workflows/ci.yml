@@ -55,8 +55,8 @@ jobs:
           if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }
           npm install
 
-      - name: Build app
-        run: npm run electron:build:win
+      - name: Build app (no publish)
+        run: npm run electron:build:win -- --publish=never
 
       - name: Rename portable zip (PowerShell)
         shell: pwsh
