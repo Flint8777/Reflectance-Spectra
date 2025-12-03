@@ -1,11 +1,12 @@
 import '@testing-library/jest-dom'
 import { vi } from 'vitest'
+import React from 'react'
 
 // Mock Plotly to avoid Canvas/WebGL errors in jsdom
 vi.mock('react-plotly.js', () => ({
-  default: ({ data, layout, ...props }) => {
-    return <div data-testid="plotly-mock" {...props} />
-  }
+    default: ({ data, layout, ...props }) => {
+        return React.createElement('div', { 'data-testid': 'plotly-mock', ...props })
+    }
 }))
 
 // Mock HTMLCanvasElement.getContext if needed
