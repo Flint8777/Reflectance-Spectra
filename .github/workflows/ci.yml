@@ -58,6 +58,19 @@ jobs:
       - name: Build app
         run: npm run electron:build:win
 
+      - name: Rename portable zip (PowerShell)
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path "dist-electron" -Filter "*.zip" -File
+          foreach ($f in $files) {
+            $m = ($f.Name | Select-String -Pattern "-v([0-9.]+)-windows-portable\.zip")
+            if ($m) {
+              $version = $m.Matches[0].Groups[1].Value
+              $newName = "Reflectance-Spectra-Viewer-v$version`_win.zip"
+              Rename-Item -Path $f.FullName -NewName $newName
+            }
+          }
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
