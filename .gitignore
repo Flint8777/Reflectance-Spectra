@@ -17,29 +17,17 @@ pnpm-debug.log*
 .idea/
 *.code-workspace
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.pytest_cache/
-.ipynb_checkpoints/
-.venv/
-venv/
-env/
+# Node / Build outputs
+node_modules/
+dist/
+dist-electron/
+.vite/
+.cache/
+coverage/
+tmp/
+out/
 
-# Node / Web (Release)
-Release/node_modules/
-Release/dist/
-Release/dist-electron/
-Release/.vite/
-Release/.cache/
-Release/coverage/
-Release/tmp/
-Release/out/
-
-# Build outputs (general pattern - do not commit installers/binaries)
-dist*/
+# Build artifacts (do not commit installers/binaries)
 *.zip
 *.exe
 *.dmg
@@ -48,8 +36,6 @@ dist*/
 # Local env files
 .env
 .env.*
-web-viewer/.env
-web-viewer/.env.*
 
 # Shortcuts / miscellaneous
 *.lnk

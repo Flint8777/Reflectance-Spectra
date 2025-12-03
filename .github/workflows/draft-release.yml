@@ -1,0 +1,67 @@
+name: Create Draft Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get previous tag
+        id: prev_tag
+        run: |
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^${CURRENT_TAG}$" | tail -n1)
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURRENT_TAG" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
+          echo "current_tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          CURRENT_TAG="${{ steps.prev_tag.outputs.current_tag }}"
+          PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
+          
+          echo "## 変更内容" > notes.md
+          echo "" >> notes.md
+          git log ${PREV_TAG}..${CURRENT_TAG} --pretty=format:"- %s (%h)" >> notes.md
+          echo "" >> notes.md
+          echo "" >> notes.md
+          echo "## ダウンロード" >> notes.md
+          echo "" >> notes.md
+          echo "### Windows" >> notes.md
+          echo "- \`Reflectance-Spectra-Viewer-${CURRENT_TAG}_win.zip\`" >> notes.md
+          echo "" >> notes.md
+          echo "### macOS" >> notes.md
+          echo "**Intel Mac (x64)**" >> notes.md
+          echo "- \`Reflectance.Spectra.Viewer-${CURRENT_TAG#v}_mac_x64.dmg\`" >> notes.md
+          echo "- \`Reflectance.Spectra.Viewer-${CURRENT_TAG#v}_mac_x64.zip\`" >> notes.md
+          echo "" >> notes.md
+          echo "**Apple Silicon (M1/M2/M3)**" >> notes.md
+          echo "- \`Reflectance.Spectra.Viewer-${CURRENT_TAG#v}_mac_arm64.dmg\`" >> notes.md
+          echo "- \`Reflectance.Spectra.Viewer-${CURRENT_TAG#v}_mac_arm64.zip\`" >> notes.md
+          echo "" >> notes.md
+          echo "---" >> notes.md
+          echo "" >> notes.md
+          echo "リリースビルドは自動生成されます。数分お待ちください。" >> notes.md
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          body_path: notes.md
+          name: "Release ${{ steps.prev_tag.outputs.current_tag }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

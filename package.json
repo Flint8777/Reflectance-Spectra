@@ -7,7 +7,7 @@
     "main": "electron/main.cjs",
     "type": "module",
     "scripts": {
-        "dev": "vite",
+        "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
         "build": "vite build",
         "preview": "vite preview",
         "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
@@ -15,7 +15,7 @@
         "electron:build:win": "vite build && electron-builder --win",
         "electron:build:mac": "vite build && electron-builder --mac",
         "electron:build:all": "vite build && electron-builder --win --mac",
-        "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json | ConvertFrom-Json).version; Compress-Archive -Path dist-electron\\win-unpacked\\* -DestinationPath dist-electron\\Reflectance-Spectra-Viewer-v$($v)-windows-portable.zip -Force\""
+        "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json | ConvertFrom-Json).version; $parent=\"Reflectance Spectra Viewer\"; $src=\"dist-electron/win-unpacked\"; $dst=\"dist-electron/$parent\"; if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; Copy-Item $src -Destination $dst -Recurse; Compress-Archive -Path $dst/* -DestinationPath dist-electron/Reflectance-Spectra-Viewer-v$($v)-windows-portable.zip -Force; Remove-Item -Recurse -Force $dst\""
     },
     "dependencies": {
         "plotly.js-dist-min": "^2.34.0",

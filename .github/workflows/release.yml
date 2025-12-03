@@ -1,4 +1,4 @@
-name: Release builds (Windows & macOS)
+﻿name: Release builds (Windows & macOS)
 
 on:
   push:
@@ -27,7 +27,6 @@ jobs:
 
       - name: Inject version from tag (if tag)
         if: startsWith(github.ref, 'refs/tags/')
-        working-directory: Release
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
@@ -36,35 +35,43 @@ jobs:
           node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
 
       - name: Install dependencies
-        working-directory: Release
         run: npm install
 
       - name: Ensure Rollup native binary (Windows)
-        working-directory: Release
         shell: bash
         run: |
           VER=$(node -p "require('rollup/package.json').version")
           echo "Installing @rollup/rollup-win32-x64-msvc@${VER}"
           npm i -D @rollup/rollup-win32-x64-msvc@"${VER}"
 
+
       - name: Build Windows portable
-        working-directory: Release
         run: |
           npm run electron:build:win
           npm run pack:zip
+          # リネーム: Reflectance-Spectra-Viewer-v<version>_win.zip
+          for f in dist-electron/*.zip; do 
+            base="${f##*/}"
+            version=$(echo "$base" | sed -E 's/.*-v([0-9.]+)-windows-portable.zip/\1/')
+            if [ -n "$version" ]; then
+              mv "$f" "dist-electron/Reflectance-Spectra-Viewer-v${version}_win.zip"
+            fi
+          done
+
 
       - name: Upload artifacts (manual run only)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v4
         with:
           name: windows-portable-dist
-          path: Release/dist-electron/*.zip
+          path: dist-electron/Reflectance-Spectra-Viewer-v*_win.zip
+
 
       - name: Publish GitHub Release assets (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: Release/dist-electron/*.zip
+          files: dist-electron/Reflectance-Spectra-Viewer-v*_win.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -92,7 +99,6 @@ jobs:
 
       - name: Inject version from tag (if tag)
         if: startsWith(github.ref, 'refs/tags/')
-        working-directory: Release
         shell: bash
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
@@ -101,19 +107,17 @@ jobs:
           node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
 
       - name: Install dependencies
-        working-directory: Release
         run: npm install
 
       - name: Ensure Rollup native binary (macOS)
-        working-directory: Release
         shell: bash
         run: |
           VER=$(node -p "require('rollup/package.json').version")
           echo "Installing @rollup/rollup-darwin-${{ matrix.arch }}@${VER}"
           npm i -D @rollup/rollup-darwin-${{ matrix.arch }}@"${VER}"
 
+
       - name: Build macOS app (dmg/zip)
-        working-directory: Release
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
@@ -122,26 +126,46 @@ jobs:
           mkdir -p dist-electron/renamed
           for f in dist-electron/*.dmg; do 
             base="${f##*/}"
-            base="${base%.dmg}"
-            mv "$f" "dist-electron/renamed/${base}-${{ matrix.arch }}.dmg"
+            version=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.dmg/\1/')
+            arch=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.dmg/\2/')
+            if [ -n "$version" ] && [ -n "$arch" ]; then
+              mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.dmg"
+            fi
           done
           for f in dist-electron/*.zip; do 
             base="${f##*/}"
-            base="${base%.zip}"
-            mv "$f" "dist-electron/renamed/${base}-${{ matrix.arch }}.zip"
+            version=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.zip/\1/')
+            arch=$(echo "$base" | sed -E 's/.*-([0-9.]+)-(x64|arm64)\.zip/\2/')
+            if [ -n "$version" ] && [ -n "$arch" ]; then
+              # zipを一時展開し、ディレクトリ名をReflectance-Spectra-Viewer.appに変更して再zip化
+              tmpdir="dist-electron/tmpzip_${arch}"
+              rm -rf "$tmpdir"
+              mkdir -p "$tmpdir"
+              unzip -q "$f" -d "$tmpdir"
+              # 元の.appディレクトリ名を取得
+              appdir=$(find "$tmpdir" -maxdepth 1 -type d -name '*.app' | head -n1)
+              if [ -n "$appdir" ]; then
+                mv "$appdir" "$tmpdir/Reflectance-Spectra-Viewer.app"
+                (cd "$tmpdir" && zip -qry "../renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.zip" "Reflectance-Spectra-Viewer.app")
+                rm -rf "$tmpdir"
+                rm "$f"
+              fi
+            fi
           done
+
 
       - name: Upload artifacts (manual run only)
         if: ${{ github.event_name == 'workflow_dispatch' }}
         uses: actions/upload-artifact@v4
         with:
           name: mac-${{ matrix.arch }}-dist
-          path: Release/dist-electron/renamed/*
+          path: dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_*.{dmg,zip}
+
 
       - name: Publish GitHub Release assets (on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: Release/dist-electron/renamed/*
+          files: dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_*.{dmg,zip}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

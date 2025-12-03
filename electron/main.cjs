@@ -4,7 +4,23 @@ const path = require('path')
 // 開発環境かどうかの判定
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
+// 開発環境でのセキュリティ警告を抑制
+if (isDev) {
+    process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+}
+
 function createWindow() {
+
+    // package.jsonからversionを取得
+    const fs = require('fs');
+    const pkgPath = path.join(__dirname, '../package.json');
+    let version = '';
+    try {
+        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+        version = pkg.version ? ` (v${pkg.version})` : '';
+    } catch (e) {
+        version = '';
+    }
     const win = new BrowserWindow({
         width: 1400,
         height: 900,
@@ -14,7 +30,19 @@ function createWindow() {
             // 本番では DevTools を無効化
             devTools: isDev,
         },
-        title: 'Reflectance Spectra Viewer'
+        title: `Reflectance Spectra Viewer${version}`
+    })
+
+    // Content Security Policy の設定
+    win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': isDev
+                    ? ["default-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* ws://localhost:* data: blob:"]
+                    : ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';"]
+            }
+        })
     })
 
     // 開発環境ではViteのdevサーバーに接続、本番ではビルドされたファイルを読み込み
