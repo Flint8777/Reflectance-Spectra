@@ -9,6 +9,15 @@ if (isDev) {
     process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
+// WebGL/GPU を強制有効化（パッケージ版でのブラックリスト無視）
+// 一部環境でGPUが無効化され、WebGLが利用不可になる問題への対処
+try {
+    // 新名称: ignore-gpu-blocklist（旧: ignore-gpu-blacklist）。両方設定しておく
+    app.commandLine.appendSwitch('enable-webgl')
+    app.commandLine.appendSwitch('ignore-gpu-blacklist')
+    app.commandLine.appendSwitch('ignore-gpu-blocklist')
+} catch (_) { /* noop */ }
+
 function createWindow() {
 
     // package.jsonからversionを取得
@@ -29,6 +38,9 @@ function createWindow() {
             contextIsolation: true,
             // 本番では DevTools を無効化
             devTools: isDev,
+            // 明示的に WebGL を許可（将来のElectronでの互換性用）
+            // 注: 現行ではこのフラグが未使用でも、起動スイッチで有効化される
+            webgl: true,
         },
         title: `Reflectance Spectra Viewer${version}`
     })
