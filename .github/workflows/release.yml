@@ -33,11 +33,11 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           CLEAN="${TAG#v}"
           echo "Setting package.json version to ${CLEAN} from tag ${TAG}"
-          node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
+          jq --arg ver "$CLEAN" '.version = $ver' package.json > package.tmp.json && mv package.tmp.json package.json
 
       - name: Install dependencies
         working-directory: Release
-        run: npm install
+        run: npm ci
 
       - name: Ensure Rollup native binary (Windows)
         working-directory: Release
@@ -98,11 +98,11 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           CLEAN="${TAG#v}"
           echo "Setting package.json version to ${CLEAN} from tag ${TAG}"
-          node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
+          jq --arg ver "$CLEAN" '.version = $ver' package.json > package.tmp.json && mv package.tmp.json package.json
 
       - name: Install dependencies
         working-directory: Release
-        run: npm install
+        run: npm ci
 
       - name: Ensure Rollup native binary (macOS)
         working-directory: Release

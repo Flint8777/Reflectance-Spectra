@@ -48,8 +48,6 @@ dist*/
 # Local env files
 .env
 .env.*
-web-viewer/.env
-web-viewer/.env.*
 
 # Shortcuts / miscellaneous
 *.lnk

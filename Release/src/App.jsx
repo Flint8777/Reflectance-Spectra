@@ -38,17 +38,19 @@ export default function App() {
 
     const onRelayout = useCallback((ev) => {
         // Update ranges from relayout event keys
-        const xr0 = ev['xaxis.range[0]'] ?? ev['xaxis.autorange'] === true ? null : undefined
+        const xr0 = ev['xaxis.range[0]'] ?? (ev['xaxis.autorange'] === true ? null : undefined)
         const xr1 = ev['xaxis.range[1]'] ?? undefined
-        const yr0 = ev['yaxis.range[0]'] ?? ev['yaxis.autorange'] === true ? null : undefined
+        const yr0 = ev['yaxis.range[0]'] ?? (ev['yaxis.autorange'] === true ? null : undefined)
         const yr1 = ev['yaxis.range[1]'] ?? undefined
 
         setXRange((prev) => {
             if (xr0 !== undefined && xr1 !== undefined) return [Number(ev['xaxis.range[0]']), Number(ev['xaxis.range[1]'])]
+            if (xr0 === null) return null
             return prev
         })
         setYRange((prev) => {
             if (yr0 !== undefined && yr1 !== undefined) return [Number(ev['yaxis.range[0]']), Number(ev['yaxis.range[1]'])]
+            if (yr0 === null) return null
             return prev
         })
     }, [])
@@ -90,7 +92,8 @@ export default function App() {
                         newInfos.push(file.name)
                         colorIdx++
                         resolve()
-                    }
+                    },
+                    error: () => resolve(), // パース失敗時もPromiseを解決してフリーズを防ぐ
                 })
             } else {
                 // treat as DPT-like text
@@ -108,6 +111,7 @@ export default function App() {
                     colorIdx++
                     resolve()
                 }
+                reader.onerror = () => resolve() // 読み込み失敗時もPromiseを解決してフリーズを防ぐ
                 reader.readAsText(file)
             }
         }))
@@ -170,10 +174,6 @@ export default function App() {
         const plotEl = plotRef.current?.el
         const gd = plotEl && plotEl._fullLayout
         if (!gd) return { x: null, y: null }
-
-        const bbox = plotEl.getBoundingClientRect()
-        const left = gd._plotContainer.getBoundingClientRect().left
-        const top = gd._plotContainer.getBoundingClientRect().top
 
         const xaxis = gd.xaxis
         const yaxis = gd.yaxis
