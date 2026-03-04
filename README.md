@@ -157,19 +157,3 @@ npm run test:run
 
 タグ（`vX.Y.Z`）を push すると GitHub Actions が自動的に Windows / macOS 向けビルドを作成し、GitHub Release にアセットとして添付します。詳細は `GITHUB_ACTIONS.md` を参照。
 
-## 変更履歴
-
-### v2.2.0 (2025-11-30)
-
-- ドラッグ＆ドロップでファイル読み込みに対応
-- Reflectance Spectra プリセット時の単位選択ダイアログを導入（nm→μm 変換対応）
-- 凡例の並べ替え機能（ファイル名/拡張子、昇順/降順）
-- XRD の対応形式に ASC を追加
-- 温度測定データ（TXT 形式）の自動判定・読み込みに対応
-- ヘッダーあり/なし CSV ファイルの自動判定
-
-### v2.1.4 (2025-11-08)
-
-- Electron デスクトップアプリ版リリース
-- WebGL による高速描画対応
-- macOS 自動ビルド（CI）追加
