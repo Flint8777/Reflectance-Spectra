@@ -140,8 +140,6 @@ jobs:
             echo "- \`web-dist-${CURRENT_TAG}.zip\` — ブラウザで動作するWeb版（解凍して \`index.html\` を開く）"
             echo ""
             echo "---"
-            echo ""
-            echo "リリースビルドは自動生成されます。数分お待ちください。"
           } > notes.md
 
       - name: Create draft release
