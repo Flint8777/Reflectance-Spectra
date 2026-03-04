@@ -17,136 +17,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Get previous release tag
-        id: prev_tag
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
-          # 公開済みリリース一覧から前回タグを取得（何度再タグしても常にv2.2.0等を参照）
-          PREV_TAG=$(gh release list --limit 20 --json tagName,isDraft \
-            --jq '[.[] | select(.isDraft == false)] | .[0].tagName // ""' 2>/dev/null || echo "")
-          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURRENT_TAG" ]; then
-            PREV_TAG=$(git rev-list --max-parents=0 HEAD | head -n1)
-          fi
-          echo "prev_tag=${PREV_TAG}" >> $GITHUB_OUTPUT
-          echo "current_tag=${CURRENT_TAG}" >> $GITHUB_OUTPUT
-
-      - name: Collect diff info
-        run: |
-          CURRENT_TAG="${{ steps.prev_tag.outputs.current_tag }}"
-          PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
-
-          # ユーザー向けファイル（src/, electron/）を変更したコミットのみ・CI系を除外
-          git log ${PREV_TAG}..${CURRENT_TAG} --pretty=format:"- %s" -- src/ electron/ \
-            | grep -v -E '^\- (fix|feat|chore|refactor|style|test)\(ci\):' \
-            | head -20 > commits.txt
-
-          # ユーザー向けファイルの変更統計
-          git diff ${PREV_TAG}..${CURRENT_TAG} --stat -- src/ electron/ > stat.txt
-
-          # 主要ソースファイルの差分（10000文字に制限）
-          git diff ${PREV_TAG}..${CURRENT_TAG} \
-            -- src/App.jsx electron/main.cjs electron/preload.cjs \
-            | head -c 10000 > diff.txt
-
-      - name: Generate Japanese release notes with Claude API
-        id: ai_notes
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          CURRENT_TAG="${{ steps.prev_tag.outputs.current_tag }}"
-          PREV_TAG="${{ steps.prev_tag.outputs.prev_tag }}"
-
-          if [ -z "${ANTHROPIC_API_KEY}" ]; then
-            echo "ANTHROPIC_API_KEY が未設定のためフォールバックします"
-            echo "fallback=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          COMMITS=$(cat commits.txt)
-          STAT=$(cat stat.txt)
-          DIFF=$(cat diff.txt)
-
-          RESPONSE=$(jq -n \
-            --arg version "$CURRENT_TAG" \
-            --arg prev "$PREV_TAG" \
-            --arg commits "$COMMITS" \
-            --arg stat "$STAT" \
-            --arg diff "$DIFF" \
-            '{
-              model: "claude-haiku-4-5-20251001",
-              max_tokens: 1024,
-              messages: [{
-                role: "user",
-                content: ($prev + " から " + $version + " への変更点について、エンドユーザー向けの日本語リリースノートを作成してください。\n\n## ユーザー向けコミット\n" + $commits + "\n\n## 変更ファイル統計\n" + $stat + "\n\n## 差分（抜粋）\n" + $diff + "\n\n### 出力ルール\n- アプリを使うユーザーが気づく変化のみ記述する\n- 新機能・バグ修正・改善を ## セクションで分類（該当するものだけ）\n- CI・ワークフロー・開発環境の変更は一切含めない\n- 技術的な実装詳細ではなく機能・操作の変化を記述\n- Markdownで箇条書き、200〜350字程度")
-              }]
-            }' | curl -sf https://api.anthropic.com/v1/messages \
-              -H "x-api-key: ${ANTHROPIC_API_KEY}" \
-              -H "anthropic-version: 2023-06-01" \
-              -H "content-type: application/json" \
-              -d @-)
-
-          if [ $? -ne 0 ] || [ -z "$RESPONSE" ]; then
-            echo "Claude API 呼び出しに失敗しました。フォールバックします"
-            echo "fallback=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          AI_TEXT=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
-          if [ -z "$AI_TEXT" ]; then
-            echo "レスポンスのパースに失敗しました。フォールバックします"
-            echo "fallback=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          echo "$AI_TEXT" > ai_notes.txt
-          echo "✅ Claude APIによるリリースノート生成成功"
-          echo "fallback=false" >> $GITHUB_OUTPUT
-
-      - name: Build release notes
-        run: |
-          CURRENT_TAG="${{ steps.prev_tag.outputs.current_tag }}"
-          VER="${CURRENT_TAG#v}"
-
-          {
-            if [ "${{ steps.ai_notes.outputs.fallback }}" = "false" ]; then
-              cat ai_notes.txt
-            else
-              echo "## 変更内容"
-              echo ""
-              cat commits.txt
-            fi
-
-            echo ""
-            echo "---"
-            echo ""
-            echo "## ダウンロード"
-            echo ""
-            echo "### Windows"
-            echo "- \`Reflectance-Spectra-Viewer-${CURRENT_TAG}_win.zip\` — 解凍して \`Reflectance Spectra Viewer.exe\` を実行"
-            echo ""
-            echo "### macOS"
-            echo ""
-            echo "**Intel Mac**"
-            echo "- \`Reflectance.Spectra.Viewer-${VER}_mac_x64.dmg\`"
-            echo ""
-            echo "**Apple Silicon**"
-            echo "- \`Reflectance.Spectra.Viewer-${VER}_mac_arm64.dmg\`"
-            echo ""
-            echo "> **初回起動時の注意**（「開発元が未確認」の警告が出る場合）: アプリを右クリック →「開く」→ 警告ダイアログで再度「開く」"
-            echo ""
-            echo "### Web版"
-            echo "- \`web-dist-${CURRENT_TAG}.zip\` — ブラウザで動作するWeb版（解凍して \`index.html\` を開く）"
-            echo ""
-            echo "---"
-          } > notes.md
+      - name: Get tag name
+        id: tag
+        run: echo "current_tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Create draft release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          body_path: notes.md
-          name: "Release ${{ steps.prev_tag.outputs.current_tag }}"
+          body: "リリースノートを生成中です。`bash scripts/release-notes.sh ${{ steps.tag.outputs.current_tag }}` を実行してください。"
+          name: "Release ${{ steps.tag.outputs.current_tag }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
