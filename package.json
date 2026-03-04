@@ -15,7 +15,7 @@
         "electron:build:win": "vite build && electron-builder --win",
         "electron:build:mac": "vite build && electron-builder --mac",
         "electron:build:all": "vite build && electron-builder --win --mac",
-        "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json -Raw | ConvertFrom-Json).version; $parent='Reflectance Spectra Viewer'; $src=Join-Path 'dist-electron' 'win-unpacked'; $dst=Join-Path 'dist-electron' $parent; if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; Copy-Item -Path $src -Destination $dst -Recurse; $zip=Join-Path 'dist-electron' ('Reflectance-Spectra-Viewer-v{0}-windows-portable.zip' -f $v); if (Test-Path $zip) { Remove-Item -Force $zip }; Compress-Archive -Path (Join-Path $dst '*') -DestinationPath $zip -Force; Remove-Item -Recurse -Force $dst\"",
+        "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json -Raw | ConvertFrom-Json).version; $parent='Reflectance Spectra Viewer'; $src=Join-Path 'dist-electron' 'win-unpacked'; $dst=Join-Path 'dist-electron' $parent; if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; Copy-Item -Path $src -Destination $dst -Recurse; $zip=Join-Path 'dist-electron' ('Reflectance-Spectra-Viewer-v{0}-windows-portable.zip' -f $v); if (Test-Path $zip) { Remove-Item -Force $zip }; Compress-Archive -Path $dst -DestinationPath $zip -Force; Remove-Item -Recurse -Force $dst\"",
         "test": "vitest",
         "test:run": "vitest run"
     },
