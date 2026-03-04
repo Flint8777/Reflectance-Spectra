@@ -109,13 +109,13 @@ jobs:
           mkdir -p dist-electron/renamed
           for f in dist-electron/*.dmg; do
             base="${f##*/}"
-            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-arm64)?\.dmg$/\1/')
+            version=$(echo "$base" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [[ "$base" == *"arm64"* ]]; then arch="arm64"; else arch="x64"; fi
             [ -n "$version" ] && mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_${arch}.dmg"
           done
           for f in dist-electron/*.zip; do
             base="${f##*/}"
-            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-mac(-arm64)?)?\.zip$/\1/')
+            version=$(echo "$base" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [[ "$base" == *"arm64"* ]]; then arch="arm64"; else arch="x64"; fi
             if [ -n "$version" ]; then
               tmpdir="dist-electron/tmpzip_${arch}"
@@ -183,12 +183,12 @@ jobs:
           mkdir -p dist-electron/renamed
           for f in dist-electron/*.dmg; do
             base="${f##*/}"
-            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-arm64)?\.dmg$/\1/')
+            version=$(echo "$base" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             [ -n "$version" ] && mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_arm64.dmg"
           done
           for f in dist-electron/*.zip; do
             base="${f##*/}"
-            version=$(echo "$base" | sed -E 's/^Reflectance Spectra Viewer-([0-9.]+)(-mac(-arm64)?)?\.zip$/\1/')
+            version=$(echo "$base" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
             if [ -n "$version" ]; then
               tmpdir="dist-electron/tmpzip_arm64"
               rm -rf "$tmpdir" && mkdir -p "$tmpdir"
