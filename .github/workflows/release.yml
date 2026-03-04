@@ -237,8 +237,12 @@ jobs:
           node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
 
       - name: Install dependencies
-        # package-lock.json がWindows環境で生成されているためnpm installを使用
-        run: npm install
+        run: npm ci
+
+      - name: Ensure Rollup native binary (Linux)
+        run: |
+          VER=$(node -p "require('rollup/package.json').version")
+          npm i -D @rollup/rollup-linux-x64-gnu@"${VER}"
 
       - name: Build
         run: npm run build

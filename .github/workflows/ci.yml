@@ -24,8 +24,12 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        # package-lock.json がWindows環境で生成されているためnpm installを使用
-        run: npm install
+        run: npm ci
+
+      - name: Ensure Rollup native binary (Linux)
+        run: |
+          VER=$(node -p "require('rollup/package.json').version")
+          npm i -D @rollup/rollup-linux-x64-gnu@"${VER}"
 
       - name: Run unit tests
         run: npm run test:run
