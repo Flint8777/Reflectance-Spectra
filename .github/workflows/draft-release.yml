@@ -134,6 +134,8 @@ jobs:
             echo "**Apple Silicon**"
             echo "- \`Reflectance.Spectra.Viewer-${VER}_mac_arm64.dmg\`"
             echo ""
+            echo "> **初回起動時の注意**（「開発元が未確認」の警告が出る場合）: アプリを右クリック →「開く」→ 警告ダイアログで再度「開く」"
+            echo ""
             echo "### Web版"
             echo "- \`web-dist-${CURRENT_TAG}.zip\` — ブラウザで動作するWeb版（解凍して \`index.html\` を開く）"
             echo ""
