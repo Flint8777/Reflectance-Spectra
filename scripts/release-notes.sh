@@ -17,13 +17,21 @@ fi
 
 echo "▶ 差分範囲: $PREV_TAG → $CURRENT_TAG"
 
+# タグ参照を明示（ブランチと同名の場合の曖昧さ回避）
+REF_PREV="refs/tags/${PREV_TAG}"
+REF_CURR="refs/tags/${CURRENT_TAG}"
+# PREV_TAG が SHA の場合（初回リリース）はそのまま使う
+if ! git rev-parse "${REF_PREV}" >/dev/null 2>&1; then
+    REF_PREV="${PREV_TAG}"
+fi
+
 # ユーザー向けコミット（CI系除外）
-COMMITS=$(git log "${PREV_TAG}..${CURRENT_TAG}" --pretty=format:"- %s" -- src/ electron/ \
+COMMITS=$(git log "${REF_PREV}..${REF_CURR}" --pretty=format:"- %s" -- src/ electron/ \
     | grep -v -E '^\- .+\(ci\):' || true)
 
 # 変更統計と差分
-STAT=$(git diff "${PREV_TAG}..${CURRENT_TAG}" --stat -- src/ electron/)
-DIFF=$(git diff "${PREV_TAG}..${CURRENT_TAG}" \
+STAT=$(git diff "${REF_PREV}..${REF_CURR}" --stat -- src/ electron/)
+DIFF=$(git diff "${REF_PREV}..${REF_CURR}" \
     -- src/App.jsx electron/main.cjs electron/preload.cjs \
     | head -c 10000)
 
@@ -47,7 +55,7 @@ ${DIFF}
 - Markdownで箇条書き、200〜350字程度"
 
 echo "▶ Claude でリリースノート生成中..."
-AI_NOTES=$(claude -p "$PROMPT" 2>/dev/null)
+AI_NOTES=$(unset CLAUDECODE && claude -p "$PROMPT" 2>/dev/null)
 
 if [ -z "$AI_NOTES" ]; then
     echo "❌ Claude の出力が空でした"
