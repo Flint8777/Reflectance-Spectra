@@ -21,7 +21,7 @@ jobs:
         id: prev_tag
         run: |
           CURRENT_TAG="${GITHUB_REF#refs/tags/}"
-          PREV_TAG=$(git tag --sort=-v:refname | grep -A1 "^${CURRENT_TAG}$" | tail -n1)
+          PREV_TAG=$(git tag --sort=-v:refname | grep -F -A1 "^${CURRENT_TAG}$" | tail -n1)
           if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "$CURRENT_TAG" ]; then
             PREV_TAG=$(git rev-list --max-parents=0 HEAD)
           fi
@@ -94,6 +94,7 @@ jobs:
           fi
 
           echo "$AI_TEXT" > ai_notes.txt
+          echo "✅ Claude APIによるリリースノート生成成功"
           echo "fallback=false" >> $GITHUB_OUTPUT
 
       - name: Build release notes

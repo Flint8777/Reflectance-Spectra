@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   verify-windows:
@@ -22,31 +23,27 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
 
       - name: Extract and verify
-        shell: powershell
+        shell: pwsh
         run: |
           $zip = Get-ChildItem -Filter "*.zip" | Select-Object -First 1
-          if ($zip) {
-            Write-Host "Found: $($zip.Name)"
-            Expand-Archive -Path $zip.FullName -DestinationPath "extracted"
-            $exe = Get-ChildItem -Path "extracted" -Recurse -Filter "*.exe" | Select-Object -First 1
-            if ($exe) {
-              Write-Host "Executable found: $($exe.FullName)"
-              # 起動テスト（5秒後に強制終了）
-              $proc = Start-Process -FilePath $exe.FullName -PassThru -WindowStyle Hidden
-              Start-Sleep -Seconds 5
-              if (!$proc.HasExited) {
-                Write-Host "✅ App started successfully"
-                Stop-Process -Id $proc.Id -Force
-              } else {
-                Write-Host "❌ App crashed immediately"
-                exit 1
-              }
-            } else {
-              Write-Host "❌ Executable not found"
-              exit 1
-            }
+          if (-not $zip) { Write-Host "❌ ZIP file not found"; exit 1 }
+          Write-Host "Found: $($zip.Name)"
+          Expand-Archive -Path $zip.FullName -DestinationPath "extracted"
+          $exe = Get-ChildItem -Path "extracted" -Recurse -Filter "*.exe" | Select-Object -First 1
+          if (-not $exe) { Write-Host "❌ Executable not found"; exit 1 }
+          Write-Host "Executable found: $($exe.FullName)"
+          $proc = Start-Process -FilePath $exe.FullName -PassThru -WindowStyle Hidden
+          # 最大30秒ポーリングして起動確認
+          $started = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 1
+            if (-not $proc.HasExited) { $started = $true; break }
+          }
+          if ($started) {
+            Write-Host "✅ App started successfully"
+            Stop-Process -Id $proc.Id -Force
           } else {
-            Write-Host "❌ ZIP file not found"
+            Write-Host "❌ App crashed immediately"
             exit 1
           }
 
@@ -64,30 +61,24 @@ jobs:
       - name: Extract and verify
         run: |
           zip_file=$(find . -name "*.zip" -type f | head -n1)
-          if [ -n "$zip_file" ]; then
-            echo "Found: $zip_file"
-            unzip -q "$zip_file"
-            app=$(find . -name "*.app" -type d | head -n1)
-            if [ -n "$app" ]; then
-              echo "App found: $app"
-              # 起動テスト（5秒後にプロセス名で確認）
-              open "$app"
-              sleep 5
-              if pgrep -f "Reflectance Spectra Viewer" > /dev/null 2>&1; then
-                echo "✅ App started successfully"
-                pkill -f "Reflectance Spectra Viewer" 2>/dev/null || true
-              else
-                echo "❌ App crashed immediately"
-                exit 1
-              fi
-            else
-              echo "❌ .app bundle not found"
-              exit 1
+          if [ -z "$zip_file" ]; then echo "❌ ZIP file not found"; exit 1; fi
+          echo "Found: $zip_file"
+          unzip -q "$zip_file"
+          app=$(find . -name "*.app" -type d | head -n1)
+          if [ -z "$app" ]; then echo "❌ .app bundle not found"; exit 1; fi
+          echo "App found: $app"
+          open "$app"
+          # 最大30秒ポーリングして起動確認
+          for i in $(seq 1 30); do
+            sleep 1
+            if pgrep -f "Reflectance Spectra Viewer" > /dev/null 2>&1; then
+              echo "✅ App started successfully (${i}s)"
+              pkill -f "Reflectance Spectra Viewer" 2>/dev/null || true
+              exit 0
             fi
-          else
-            echo "❌ ZIP file not found"
-            exit 1
-          fi
+          done
+          echo "❌ App failed to start within 30 seconds"
+          exit 1
 
   verify-macos-arm64:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
@@ -103,27 +94,21 @@ jobs:
       - name: Extract and verify
         run: |
           zip_file=$(find . -name "*.zip" -type f | head -n1)
-          if [ -n "$zip_file" ]; then
-            echo "Found: $zip_file"
-            unzip -q "$zip_file"
-            app=$(find . -name "*.app" -type d | head -n1)
-            if [ -n "$app" ]; then
-              echo "App found: $app"
-              # 起動テスト（5秒後にプロセス名で確認）
-              open "$app"
-              sleep 5
-              if pgrep -f "Reflectance Spectra Viewer" > /dev/null 2>&1; then
-                echo "✅ App started successfully"
-                pkill -f "Reflectance Spectra Viewer" 2>/dev/null || true
-              else
-                echo "❌ App crashed immediately"
-                exit 1
-              fi
-            else
-              echo "❌ .app bundle not found"
-              exit 1
+          if [ -z "$zip_file" ]; then echo "❌ ZIP file not found"; exit 1; fi
+          echo "Found: $zip_file"
+          unzip -q "$zip_file"
+          app=$(find . -name "*.app" -type d | head -n1)
+          if [ -z "$app" ]; then echo "❌ .app bundle not found"; exit 1; fi
+          echo "App found: $app"
+          open "$app"
+          # 最大30秒ポーリングして起動確認
+          for i in $(seq 1 30); do
+            sleep 1
+            if pgrep -f "Reflectance Spectra Viewer" > /dev/null 2>&1; then
+              echo "✅ App started successfully (${i}s)"
+              pkill -f "Reflectance Spectra Viewer" 2>/dev/null || true
+              exit 0
             fi
-          else
-            echo "❌ ZIP file not found"
-            exit 1
-          fi
+          done
+          echo "❌ App failed to start within 30 seconds"
+          exit 1
