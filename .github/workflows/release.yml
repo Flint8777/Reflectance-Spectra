@@ -33,11 +33,7 @@ jobs:
           node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
 
       - name: Install dependencies
-        shell: pwsh
-        run: |
-          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
-          if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }
-          npm install
+        run: npm ci
 
       - name: Ensure Rollup native binary (Windows)
         shell: bash
@@ -93,6 +89,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Set version from tag
         shell: bash
@@ -103,7 +100,7 @@ jobs:
           node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Ensure Rollup native binary (macOS x64)
         run: |
@@ -177,6 +174,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Set version from tag
         shell: bash
@@ -187,7 +185,7 @@ jobs:
           node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Ensure Rollup native binary (macOS arm64)
         run: |
@@ -260,9 +258,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: |
-          rm -rf node_modules package-lock.json
-          npm install
+        run: npm ci
 
       - name: Build
         run: npm run build

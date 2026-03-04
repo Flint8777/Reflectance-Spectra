@@ -209,6 +209,68 @@ function ExtIcon() {
     )
 }
 
+function UpdateIcon() {
+    return (
+        <svg width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+            <polyline points='23 4 23 10 17 10' />
+            <polyline points='1 20 1 14 7 14' />
+            <path d='M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15' />
+        </svg>
+    )
+}
+
+function UpdateDialog({ status, info, progress, platform, onDownload, onOpenBrowser, onClose }) {
+    return (
+        <div className='dialog-overlay'>
+            <div className='dialog-box'>
+                <h3>アップデート確認</h3>
+                {status === 'checking' && <p>確認中...</p>}
+                {status === 'available' && (
+                    <>
+                        <p>新しいバージョンが利用可能です。</p>
+                        <p style={{ fontSize: 13, color: '#555' }}>
+                            現在: v{info.currentVersion} &rarr; 最新: v{info.latestVersion}
+                        </p>
+                        <div className='dialog-actions'>
+                            {platform === 'win32'
+                                ? <button className='apply-btn' onClick={onDownload}>ダウンロードして適用</button>
+                                : <button className='apply-btn' onClick={onOpenBrowser}>リリースページを開く</button>
+                            }
+                            <button className='cancel-btn' onClick={onClose}>後で</button>
+                        </div>
+                    </>
+                )}
+                {status === 'downloading' && (
+                    <>
+                        <p>ダウンロード中... {progress?.percent ?? 0}%</p>
+                        <div style={{ width: '100%', background: '#eee', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                            <div style={{ width: `${progress?.percent ?? 0}%`, background: '#4a9eff', height: '100%', borderRadius: 4, transition: 'width 0.2s' }} />
+                        </div>
+                        <p style={{ fontSize: 12, color: '#777', marginTop: 8 }}>完了後にアプリが再起動します。</p>
+                    </>
+                )}
+                {status === 'no-update' && (
+                    <>
+                        <p>最新バージョンです。(v{info?.currentVersion})</p>
+                        <div className='dialog-actions'>
+                            <button className='cancel-btn' onClick={onClose}>閉じる</button>
+                        </div>
+                    </>
+                )}
+                {status === 'error' && (
+                    <>
+                        <p style={{ color: '#c00' }}>確認中にエラーが発生しました。</p>
+                        <div className='dialog-actions'>
+                            {info?.releaseUrl && <button className='apply-btn' onClick={onOpenBrowser}>リリースページを開く</button>}
+                            <button className='cancel-btn' onClick={onClose}>閉じる</button>
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    )
+}
+
 export default function App() {
     const [traces, setTraces] = useState([])
     const [filesInfo, setFilesInfo] = useState([])
@@ -252,6 +314,13 @@ export default function App() {
     const [isDraggingFiles, setIsDraggingFiles] = useState(false)
     const [legendSortKey, setLegendSortKey] = useState('filename') // 'filename' | 'ext'
     const [legendSortOrder, setLegendSortOrder] = useState('asc') // 'asc' | 'desc'
+
+    // アップデート関連
+    const [updateStatus, setUpdateStatus] = useState('idle') // 'idle'|'checking'|'available'|'downloading'|'no-update'|'error'
+    const [updateInfo, setUpdateInfo] = useState(null)
+    const [downloadProgress, setDownloadProgress] = useState(null)
+    const [showUpdateDialog, setShowUpdateDialog] = useState(false)
+    const [platform, setPlatform] = useState(null)
 
     const onRelayout = useCallback((ev) => {
         const haveX = ev['xaxis.range[0]'] !== undefined && ev['xaxis.range[1]'] !== undefined
@@ -496,7 +565,12 @@ export default function App() {
     }, [presetSelected, parseAndAddFiles])
 
     const toggleVisibility = useCallback((idx) => { setVisibility(prev => { const next = [...prev]; next[idx] = !next[idx]; return next }) }, [])
-    const clearAll = useCallback(() => { setTraces([]); setFilesInfo([]); setVisibility([]); setXRange(null); setYRange(null) }, [])
+    const clearAll = useCallback(() => {
+        setTraces([]); setFilesInfo([]); setVisibility([]); setTraceGroupIds([])
+        setXRange(null); setYRange(null)
+        setLoadedCount(0); setRelabMeta({})
+        nextColorIdxRef.current = 0
+    }, [])
     const resetZoom = useCallback(() => { setXRange(null); setYRange(null) }, [])
 
     const applyInlineRange = useCallback((axis) => {
@@ -613,7 +687,53 @@ export default function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
+    // プラットフォーム取得 & 起動3秒後にアップデート自動チェック
+    React.useEffect(() => {
+        if (!window.electronAPI) return
+        window.electronAPI.getPlatform().then(p => setPlatform(p))
+        const timer = setTimeout(() => {
+            window.electronAPI.checkForUpdate()
+                .then(result => {
+                    setUpdateInfo(result)
+                    setUpdateStatus(result.hasUpdate ? 'available' : 'idle')
+                })
+                .catch(() => { /* バックグラウンドチェック失敗は無視 */ })
+        }, 3000)
+        return () => clearTimeout(timer)
+    }, [])
 
+    // ダウンロード進捗リスナー
+    React.useEffect(() => {
+        if (!window.electronAPI) return
+        const cleanup = window.electronAPI.onDownloadProgress(data => {
+            setDownloadProgress(data)
+        })
+        return cleanup
+    }, [])
+
+    const handleCheckUpdate = useCallback(async () => {
+        setShowUpdateDialog(true)
+        if (updateStatus === 'available' || updateStatus === 'no-update' || updateStatus === 'downloading') return
+        setUpdateStatus('checking')
+        try {
+            const result = await window.electronAPI.checkForUpdate()
+            setUpdateInfo(result)
+            setUpdateStatus(result.hasUpdate ? 'available' : 'no-update')
+        } catch {
+            setUpdateStatus('error')
+        }
+    }, [updateStatus])
+
+    const handleDownloadUpdate = useCallback(async () => {
+        setUpdateStatus('downloading')
+        setDownloadProgress(null)
+        try {
+            await window.electronAPI.downloadAndApplyUpdate()
+            // main.cjs 側で app.quit() が呼ばれる
+        } catch {
+            setUpdateStatus('error')
+        }
+    }, [])
 
     return (
         <div
@@ -666,6 +786,23 @@ export default function App() {
                     <IconButton onClick={() => setShowLabelDialog(true)} title='Axis Labels'>
                         <LabelIcon />
                     </IconButton>
+                    {window.electronAPI && (
+                        <div style={{ position: 'relative', display: 'inline-flex' }}>
+                            <IconButton
+                                onClick={handleCheckUpdate}
+                                title={updateStatus === 'available' ? 'アップデートあり' : 'アップデートを確認'}
+                            >
+                                <UpdateIcon />
+                            </IconButton>
+                            {updateStatus === 'available' && (
+                                <span style={{
+                                    position: 'absolute', top: 4, right: 4,
+                                    width: 8, height: 8, borderRadius: '50%',
+                                    background: '#e33', pointerEvents: 'none'
+                                }} />
+                            )}
+                        </div>
+                    )}
                     {/* Quick Actions removed; group buttons now toggle Show/Hide */}
                 </div>
                 <input id='file-input' type='file' multiple onChange={handleFiles} style={{ display: 'none' }} />
@@ -856,6 +993,19 @@ export default function App() {
             {showHeaderDialog && <HeaderSelectDialog candidates={headerCandidates} onSelect={selectHeader} onCancel={() => setShowHeaderDialog(false)} />}
             {showLabelDialog && <LabelSettingDialog currentX={xLabel} currentY={yLabel} onApplyPreset={applyLabelPreset} onApplyCustom={applyCustomLabels} onCancel={() => setShowLabelDialog(false)} />}
             {showPresetDialog && <InitialPresetDialog onSelect={handleInitialPreset} />}
+            {showUpdateDialog && (
+                <UpdateDialog
+                    status={updateStatus}
+                    info={updateInfo}
+                    progress={downloadProgress}
+                    platform={platform}
+                    onDownload={handleDownloadUpdate}
+                    onOpenBrowser={() => {
+                        if (updateInfo?.releaseUrl) window.electronAPI.openExternal(updateInfo.releaseUrl)
+                    }}
+                    onClose={() => setShowUpdateDialog(false)}
+                />
+            )}
 
             {unitDialogVisible && (
                 <BulkUnitDialog

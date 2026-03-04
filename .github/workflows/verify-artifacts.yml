@@ -70,13 +70,12 @@ jobs:
             app=$(find . -name "*.app" -type d | head -n1)
             if [ -n "$app" ]; then
               echo "App found: $app"
-              # 起動テスト（5秒後に強制終了）
-              open "$app" &
-              APP_PID=$!
+              # 起動テスト（5秒後にプロセス名で確認）
+              open "$app"
               sleep 5
-              if ps -p $APP_PID > /dev/null; then
+              if pgrep -f "Reflectance Spectra Viewer" > /dev/null 2>&1; then
                 echo "✅ App started successfully"
-                kill $APP_PID 2>/dev/null || true
+                pkill -f "Reflectance Spectra Viewer" 2>/dev/null || true
               else
                 echo "❌ App crashed immediately"
                 exit 1
@@ -110,13 +109,12 @@ jobs:
             app=$(find . -name "*.app" -type d | head -n1)
             if [ -n "$app" ]; then
               echo "App found: $app"
-              # 起動テスト（5秒後に強制終了）
-              open "$app" &
-              APP_PID=$!
+              # 起動テスト（5秒後にプロセス名で確認）
+              open "$app"
               sleep 5
-              if ps -p $APP_PID > /dev/null; then
+              if pgrep -f "Reflectance Spectra Viewer" > /dev/null 2>&1; then
                 echo "✅ App started successfully"
-                kill $APP_PID 2>/dev/null || true
+                pkill -f "Reflectance Spectra Viewer" 2>/dev/null || true
               else
                 echo "❌ App crashed immediately"
                 exit 1

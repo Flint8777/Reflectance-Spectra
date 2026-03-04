@@ -27,9 +27,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Ensure Rollup native binary (Windows)
         shell: bash
@@ -39,7 +40,6 @@ jobs:
           npm i -D @rollup/rollup-win32-x64-msvc@"${VER}"
 
       - name: Build (verify only)
-        working-directory: Release
         run: |
           npm run build
           echo "✅ Vite build successful"
@@ -67,9 +67,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Ensure Rollup native binary (macOS)
         shell: bash
@@ -85,7 +86,6 @@ jobs:
           fi
 
       - name: Build (verify only)
-        working-directory: Release
         run: |
           npm run build
           echo "✅ Vite build successful"

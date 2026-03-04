@@ -1,14 +1,16 @@
 # Reflectance Spectra Viewer
 
-反射スペクトル・時系列データビューアーアプリケーション。反射スペクトルデータ（CSV, DPT, RELAB TAB形式）および温度測定データ（TXT形式）の表示に対応。
+反射スペクトル・XRDパターン・温度プロファイルなど、2列形式の科学データを表示するデスクトップアプリケーション。
 
 ## 特徴
 
 - WebGLによる高速描画（Plotly.js）
-- クロスヘア、凡例操作、カラーピッカー搭載
-- 複数ファイル同時表示
-- 自動軸ラベル認識・設定
-- Windows/macOS対応
+- CSV / DPT / RELAB TAB / ASC / TXT 形式に対応
+- 複数ファイル同時表示・グループ管理
+- ドラッグ＆ドロップでファイル読み込み
+- クロスヘア、カラーピッカー、凡例ソート搭載
+- 軸ラベル・表示範囲をUIから直接設定
+- Windows / macOS 対応
 
 ## ダウンロード
 
@@ -16,20 +18,16 @@
 
 ### Windows
 
-- `Reflectance-Spectra-Viewer-portable.zip` をダウンロード
-- 解凍して `Reflectance Spectra Viewer.exe` を実行
+`Reflectance-Spectra-Viewer-vX.Y.Z_win.zip` をダウンロードして解凍し、`Reflectance Spectra Viewer.exe` を実行。
 
 ### macOS
 
-**Intel Mac (x64)**
-- `Reflectance Spectra Viewer-x.x.x-x64.dmg` をダウンロード
+| Mac の種類 | ダウンロードファイル |
+|-----------|------------------|
+| Intel | `Reflectance.Spectra.Viewer-X.Y.Z_mac_x64.dmg` |
+| Apple Silicon | `Reflectance.Spectra.Viewer-X.Y.Z_mac_arm64.dmg` |
 
-**Apple Silicon (M1/M2/M3)**
-- `Reflectance Spectra Viewer-x.x.x-arm64.dmg` をダウンロード
-
-**初回起動時の注意**
-
-macOSでは「開発元が未確認」の警告が表示されます。
+**初回起動時の注意**（「開発元が未確認」の警告が出る場合）
 
 1. アプリを右クリック → "開く" を選択
 2. 警告ダイアログで再度 "開く" をクリック
@@ -37,82 +35,83 @@ macOSでは「開発元が未確認」の警告が表示されます。
 
 ## 使い方
 
-1. アプリを起動
-2. 「ファイルを追加」を押して、対応フォーマットのファイルを読み込む（複数一括読み込み可能）
-3. グラフが表示されます
+### 起動フロー
+
+1. アプリを起動するとデータタイプ選択ダイアログが表示される
+2. データに合ったプリセットを選択（下表参照）
+3. ファイルを読み込む（ボタンまたはドラッグ＆ドロップ）
+
+| プリセット | 軸設定 | 対応フォーマット |
+|-----------|--------|----------------|
+| Reflectance Spectra | Wavelength (μm) / Reflectance | CSV, DPT, TAB+XML |
+| XRD Pattern | 2θ (°) / Intensity | CSV, ASC |
+| Temperature Profile | Time (s) / Temperature (°C) | TXT (InfraWin) |
+| Auto | ファイル内容から自動判定 | すべて |
+
+### 操作方法
+
+| 操作 | 方法 |
+|------|------|
+| ファイル追加 | ツールバーの「ファイル追加」ボタン、またはウィンドウへドラッグ＆ドロップ |
+| 個別削除 | 左パネルの ✕ ボタン |
+| 全削除 | ツールバーの「全てクリア」ボタン |
+| 表示/非表示 | 左パネルのチェックボックス |
+| 色変更 | 左パネルのカラーボックスをクリック |
+| ズーム | グラフ上をドラッグで矩形選択 |
+| ズームリセット | ダブルクリック または「ズームリセット」ボタン |
+| 表示範囲指定 | ツールバーの X/Y min・max 入力欄に数値を入力して Enter |
+| 軸ラベル変更 | ツールバーの「軸ラベル設定」ボタン |
+| 凡例ソート | 左パネル上部のソートボタン（ファイル名/拡張子、昇順/降順） |
+| グループ切替 | 左パネルの番号ボタンをクリック |
+| グループ間移動 | 左パネルのトレースをグループボタンへドラッグ |
+| グループ間コピー | 同上（Ctrl を押しながらドロップ） |
 
 ### 対応フォーマット
 
-#### 1. CSV形式（反射スペクトル）
+#### CSV
 
-ヘッダーあり・なし両方に対応：
+ヘッダーあり・なし両方を自動判定：
 
-**ヘッダーなし**
-```
-0.38,0.123
-0.39,0.124
-...
-```
-
-**ヘッダーあり**
 ```
 Wavelength,Reflectance
 0.38,0.123
 0.39,0.124
-...
 ```
 
-- 1列目: 波長（μm）
-- 2列目: 反射率
+または
 
-#### 2. DPT形式（反射スペクトル）
-
-**カンマ区切り**のテキストファイル：
 ```
 0.38,0.123
 0.39,0.124
-...
 ```
 
-- 1列目: 波長（μm）
-- 2列目: 反射率
-- **注意**: DPTファイルは必ずカンマ区切り形式である必要があります
+#### DPT（OPUS ソフトウェア出力）
 
-#### 3. RELAB PDS4形式（反射スペクトル）
+カンマ区切り2列のテキストファイル。ヘッダーなし。
 
-- XML + TAB ファイルペア
-- XMLラベルファイルを先に読み込み、その後TABファイルを読み込むと自動認識
-
-#### 4. 温度測定データ（TXT形式）
-
-以下の特徴を持つファイルを自動判定：
-- 2行目に `"This document contains measurement data of the following devices:"` を含む
-- ヘッダー行に `"Sec. after 00:00"` と `"Temperature"` 列を含む
-
-例：
 ```
-**************************************************
- This document contains measurement data of the following devices:
- At line 8: IN 140/5-H
-**************************************************
-...
-No.  Date  time  Sec. after 00:00  Temperature  Unit  Emissivity
-1    ...   ...   40106.302         499.00       °C    1.000
-...
+0.38,0.123
+0.39,0.124
 ```
 
-**自動処理**
-- 時間データを0秒始まりに自動変換
-- 軸ラベルを「Time (s)」「Temperature (°C)」に自動設定
+> **注意**: DPT はカンマ区切りのみ対応。スペース区切りは読み込めません。
 
-### 操作方法
+#### RELAB PDS4（TAB + XML）
 
-- **ズーム**: ドラッグで矩形選択
-- **ズームリセット**: ダブルクリック または 「ズームリセット」ボタン
-- **スペクトル表示/非表示**: 左側パネルのチェックボックス
-- **色変更**: 左側パネルのカラーボックスをクリック
-- **軸ラベル変更**: 「軸ラベル設定」ボタン
-- **全削除**: 「全てクリア」ボタン
+XML ラベルファイルと TAB データファイルのペア。XML を先に読み込んでから TAB を読み込むと自動認識。波長はアプリ内で nm → μm に自動変換。
+
+#### ASC（XRD データ）
+
+空白区切り2列（2θ, Intensity）のテキストファイル：
+
+```
+10.00 120
+10.05 135
+```
+
+#### TXT（温度測定データ・InfraWin 出力）
+
+2行目に `This document contains measurement data of the following devices:` を含むファイルを自動判定。時間データを 0 秒始まりに自動変換。
 
 ## 動作確認済み環境
 
@@ -121,52 +120,53 @@ No.  Date  time  Sec. after 00:00  Temperature  Unit  Emissivity
 
 ## 開発者向け
 
-### ソースからビルドする場合
+### ビルド手順
 
 ```bash
 git clone https://github.com/Flint8777/Reflectance-Spectra.git
 cd Reflectance-Spectra
-npm install
-npm run build
-npm run electron:build:win  # Windows
-npm run electron:build:mac  # macOS
+npm ci
+npm run electron:build:win   # Windows
+npm run electron:build:mac   # macOS
 ```
 
-### 配布用ZIPの作成
+### Windows 配布用 ZIP 作成
 
 ```bash
-npm run electron:build:win  # ビルド実行
-npm run pack:zip             # ZIP化（Windowsのみ）
+npm run electron:build:win
+npm run pack:zip
 ```
 
-生成物: `dist-electron/Reflectance-Spectra-Viewer-v*_win.zip`
+生成物: `dist-electron/Reflectance-Spectra-Viewer-vX.Y.Z_win.zip`
 
-### 使った技術スタック
+### テスト実行
+
+```bash
+npm run test:run
+```
+
+### 使用技術
 
 - Electron 28
 - React 18
-- Plotly.js (WebGL)
+- Plotly.js（WebGL）
 - Vite 5
-- PapaParse (CSV解析)
+- PapaParse（CSV解析）
 
-## CI/CD (GitHub Actions)
+### CI/CD
 
-詳しいCI/CDのワークフローとリリース手順は `GITHUB_ACTIONS.md` を参照してください。
+タグ（`vX.Y.Z`）を push すると GitHub Actions が自動的に Windows / macOS 向けビルドを作成し、GitHub Release にアセットとして添付します。詳細は `GITHUB_ACTIONS.md` を参照。
 
 ## 変更履歴
 
 ### v2.2.0 (2025-11-30)
 
-- ドラッグ＆ドロップでファイル読み込みに対応（エクスプローラーからの投入）
-- Reflectance Spectra プリセット時の単位選択ダイアログを導入（nm→μm変換対応）
-- 凡例の並べ替え機能（キー: ファイル名/拡張子、順序: 昇順/降順）
-- ソートボタンをグループ行の右端へ配置（上矢印/下矢印アイコン）
-- グループUIの簡素化（数字のみ表示、縦横センタリング）
-- XRDプリセットの横軸ラベルを「2θ (°)」へ変更
-- XRDの対応形式に ASC を追加（2θ–Intensity の2列ASCIIを自動パース）
-- 初期プリセットダイアログの XRD ツールチップを「CSV, ASC」に更新
-- 温度測定データ（TXT形式）の自動判定・読み込みに対応（0秒始まりへ自動補正）
-- ヘッダーあり/なしCSVファイルの自動判定
+- ドラッグ＆ドロップでファイル読み込みに対応
+- Reflectance Spectra プリセット時の単位選択ダイアログを導入（nm→μm 変換対応）
+- 凡例の並べ替え機能（ファイル名/拡張子、昇順/降順）
+- XRD の対応形式に ASC を追加
+- 温度測定データ（TXT 形式）の自動判定・読み込みに対応
+- ヘッダーあり/なし CSV ファイルの自動判定
 
 ### v2.1.4 (2025-11-08)
 

@@ -1,7 +1,7 @@
 {
     "name": "reflectance-spectra-viewer",
     "private": true,
-    "version": "1.0.0",
+    "version": "2.3.0",
     "description": "FT-IR Reflectance Spectra Viewer",
     "author": "Your Name",
     "main": "electron/main.cjs",

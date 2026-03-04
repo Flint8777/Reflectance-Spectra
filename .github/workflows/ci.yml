@@ -2,8 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, v2.2.0 ]
-    tags: [ 'v*' ]
+    branches: [ main, v2.3.0 ]
   pull_request:
     branches: [ main ]
 
@@ -22,9 +21,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: |
-          rm -rf node_modules package-lock.json
-          npm install
+        run: npm ci
 
       - name: Run unit tests
         run: npm run test:run
@@ -52,11 +49,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        shell: pwsh
-        run: |
-          if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }
-          if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }
-          npm install
+        run: npm ci
 
       - name: Build app (no publish)
         run: npm run electron:build:win -- --publish=never
