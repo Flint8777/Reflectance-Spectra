@@ -1,13 +1,13 @@
 {
     "name": "reflectance-spectra-viewer",
     "private": true,
-    "version": "1.0.0",
+    "version": "2.3.1",
     "description": "FT-IR Reflectance Spectra Viewer",
     "author": "Your Name",
     "main": "electron/main.cjs",
     "type": "module",
     "scripts": {
-        "dev": "vite",
+        "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
         "build": "vite build",
         "preview": "vite preview",
         "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
@@ -15,7 +15,10 @@
         "electron:build:win": "vite build && electron-builder --win",
         "electron:build:mac": "vite build && electron-builder --mac",
         "electron:build:all": "vite build && electron-builder --win --mac",
-        "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json | ConvertFrom-Json).version; Compress-Archive -Path dist-electron\\win-unpacked\\* -DestinationPath dist-electron\\Reflectance-Spectra-Viewer-v$($v)-windows-portable.zip -Force\""
+        "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json -Raw | ConvertFrom-Json).version; $parent='Reflectance Spectra Viewer'; $src=Join-Path 'dist-electron' 'win-unpacked'; $dst=Join-Path 'dist-electron' $parent; if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; Copy-Item -Path $src -Destination $dst -Recurse; $zip=Join-Path 'dist-electron' ('Reflectance-Spectra-Viewer-v{0}-windows-portable.zip' -f $v); if (Test-Path $zip) { Remove-Item -Force $zip }; Compress-Archive -Path $dst -DestinationPath $zip -Force; Remove-Item -Recurse -Force $dst\"",
+        "release-notes": "bash scripts/release-notes.sh",
+        "test": "vitest",
+        "test:run": "vitest run"
     },
     "dependencies": {
         "plotly.js-dist-min": "^2.34.0",
@@ -26,6 +29,10 @@
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.3.1",
+        "@testing-library/react": "^16.0.0",
+        "@testing-library/jest-dom": "^6.5.0",
+        "jsdom": "^25.0.0",
+        "vitest": "^2.1.3",
         "vite": "^5.4.8",
         "electron": "^28.0.0",
         "electron-builder": "24.13.3",

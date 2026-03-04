@@ -2,58 +2,120 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Language policy
-
-- Chat responses: Japanese
-- Content written to files (`.md`, comments, etc.): English
-- Exception: `README.md` body text should be written in Japanese
-
-## Commands
-
-All development commands run from the `Release/` directory:
+## コマンド
 
 ```bash
-cd Release
-npm install                    # Install dependencies
+# 開発（Vite devサーバー + Electron 同時起動）
+npm run dev
 
-npm run electron:dev           # Dev mode: Vite + Electron (hot reload)
-npm run dev                    # Vite dev server only (browser preview)
+# Vite devサーバーのみ（ブラウザ確認用）
+npx vite
 
-npm run electron:build:win     # Build Windows portable EXE
-npm run electron:build:mac     # Build macOS DMG + ZIP
-npm run pack:zip               # Create Windows portable ZIP (after win build)
+# Viteビルドのみ
+npm run build
+
+# ビルド＋配布パッケージ作成
+npm run electron:build:win   # Windows portable
+npm run electron:build:mac   # macOS DMG + ZIP
+npm run electron:build:all   # 両プラットフォーム
+
+# Windows portable ZIPの作成（ビルド後に実行）
+npm run pack:zip
+
+# テスト（ウォッチモード）
+npm test
+
+# テスト（1回実行）
+npm run test:run
+
+# 特定のテストファイルのみ実行
+npx vitest run src/__tests__/App.test.jsx
 ```
 
-## Architecture
+## アーキテクチャ
 
-```
-Release/          # Main Electron app (active development)
-  src/App.jsx     # Single-component React app — all UI state and logic lives here
-  src/main.jsx    # React entry point
-  electron/main.cjs  # Electron main process (CommonJS)
-  vite.config.js  # base: './' required for Electron file:// loading
+**Electron + React + Vite** によるデスクトップアプリ。反射スペクトル・時系列データの表示が目的。
 
-Prototype/        # Legacy Python/PyQt5 version (v1.x) — see ver-1.1.0 branch
-```
+### 主要ファイル
 
-### Key design points
+- `src/App.jsx` — Reactアプリ全体が単一の大きなコンポーネント（1500行超）。パース処理・状態管理・UI描画がすべてここに集約されている。
+- `electron/main.cjs` — Electronメインプロセス。`package.json` が `"type": "module"` のため `.cjs` 拡張子でCommonJSを使用。`package.json` からバージョンを読み込んでウィンドウタイトルに反映。開発時は `http://localhost:5173`、本番時は `dist/index.html` を読み込む。IPCハンドラー・自動アップデート・CSP設定を含む。
+- `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `getPlatform` を提供。
+- `vite.config.js` — `base: './'` を設定することで、Electronが `file://` プロトコル経由でビルド成果物を読み込めるようにしている。
+- `vitest.config.js` — `jsdom` 環境を使用。セットアップファイルは `src/__tests__/setup.js`。
 
-- **`App.jsx` is intentionally a single large component** — no sub-components. All state (`traces`, `visibility`, `xRange`, `yRange`, `cross`) is co-located.
-- **Plotly's built-in legend is disabled** (`showlegend: false`). A custom left-panel legend handles visibility toggles and per-trace color pickers (HTML5 `<input type="color">`).
-- **File parsing**: CSV files use PapaParse; all other extensions (e.g. `.dpt`) use the custom `parseDPT()` text parser (splits on whitespace/comma/semicolon/tab).
-- **Crosshair**: A CSS overlay (`crosshair-overlay`) draws the crosshair lines; mouse events are throttled via `requestAnimationFrame`. Coordinate conversion uses Plotly's internal `p2l()` axis method.
-- **Electron dev detection**: `isDev = !app.isPackaged` — DevTools and menu bar are enabled only in dev mode.
+### App.jsx の状態モデル
 
-### CI / Release
+インデックスで対応付けられた並列配列で管理：
 
-- Pushing a `v*` tag triggers `.github/workflows/release.yml`, which builds Windows (portable ZIP) and macOS (DMG + ZIP for x64 and arm64) and publishes them to GitHub Releases.
-- `workflow_dispatch` triggers a manual build and uploads artifacts instead.
-- The workflow injects the tag version into `package.json` at build time via `jq`, so local `package.json` version does not need to be updated manually before tagging.
-- CI uses `npm ci` (not `npm install`) to ensure deterministic installs from `package-lock.json`.
+- `traces[]` — Plotlyトレースオブジェクト（`{x, y, type: 'scattergl', mode: 'lines', ...}`）
+- `filesInfo[]` — 対応するファイル名
+- `visibility[]` — トレースごとの表示/非表示フラグ
+- `traceGroupIds[]` — 各トレースが属するグループID
 
-### Known pitfalls
+`groups[]` でトレースのセットをまとめて表示切替できる。`activeGroupId` が新規ファイルの追加先グループを決定する。
 
-- **`??` と三項演算子の優先度**: `a ?? b === c ? x : y` は `(a ?? b) === c ? x : y` と解釈される。`onRelayout` など条件式が複合する箇所では必ず括弧をつける。
-- **ファイル読み込みのPromise**: `handleFiles` 内のPromiseは `resolve` だけで `reject` がない設計。FileReaderやPapaParseのエラーコールバックで必ず `resolve()` を呼ぶこと（呼ばないと `Promise.all` が永遠に待ち続ける）。
-- **アイコンファイル未同梱**: `Release/electron/icons/` に `icon.png` / `icon.ico` が存在しないため、ビルドするとデフォルトのElectronアイコンになる。`icons/README.md` に作成手順あり。
-- **`web-viewer/` は過去の名称**: 旧ディレクトリ名。現在は `Release/` に改名済み。混同しないこと。
+アップデート関連のステート：
+- `updateStatus` — `'idle'|'checking'|'available'|'downloading'|'no-update'|'error'`
+- `updateInfo` — `{ hasUpdate, currentVersion, latestVersion, releaseUrl }`
+
+### ファイルパース（`parseAndAddFiles`）
+
+すべて `FileReader` によるクライアントサイド処理。拡張子と内容でフォーマットを判定：
+
+| 拡張子 | パーサー |
+|--------|----------|
+| `.csv` | PapaParse。先頭行が数値でなければヘッダーありと自動判定 |
+| `.dpt` | カスタム `parseDPT()` — カンマ区切り、`#` コメント行をスキップ |
+| `.tab` | RELAB PDS4 TAB — 先に対応する `.xml` を読み込んでメタデータを取得する必要あり。波長はnm→μmに自動変換 |
+| `.xml` | RELABメタデータを `relabMeta` ステートに格納し、後続の `.tab` 読み込みに利用 |
+| `.asc` | XRD ASCII — 空白区切り2列（2θ, Intensity） |
+| `.txt` | 温度測定データ — 2行目の内容で自動判定。時間を0秒始まりに自動変換 |
+| その他 | 空白/タブ区切り2列のフォールバック |
+
+単位変換：プリセットが `wavelength-reflectance` かつユニットダイアログでユーザーが "nm" を選択した場合、x値を1000で除算してμmに変換。
+
+### Plotly統合
+
+- `react-plotly.js` を使用し、`type: 'scattergl'`（WebGL）で高速描画。
+- クロスヘア追跡は `onHover` イベント + `requestAnimationFrame`。
+- ズーム状態を `xRange`/`yRange` に保持し、Plotlyの `layout` に渡す。
+- `plotRef` でPlotly DOMノードを参照し、プログラムからのズームリセットに使用。
+
+### プリセットダイアログ
+
+初回起動時にプリセット選択ダイアログが表示される（`showPresetDialog: true`）：
+
+- `wavelength-reflectance` — 軸を "Wavelength (μm)" / "Reflectance" に設定
+- `xrd` — 軸を "2θ (°)" / "Intensity" に設定
+- `temperature` — 軸を "Time (s)" / "Temperature (°C)" に設定
+- `auto` — ファイル内容から自動判定
+
+### 自動アップデート
+
+`window.electronAPI`（`preload.cjs` 経由）でGitHub Releasesと通信：
+
+1. 起動時に `check-update` IPCで最新リリースを確認
+2. 新バージョンがあれば通知バッジを表示
+3. ユーザーが「アップデート」を選択すると Windows portable ZIPをダウンロード
+4. PowerShell スクリプトを生成・実行してZIPを展開し、アプリを再起動
+
+Webブラウザ環境（`window.electronAPI` が未定義）では自動アップデートUIは非表示。
+
+### CI/CD
+
+- **CI**: `.github/workflows/ci.yml` が `main` / `v2.3.0` へのpush・PRでユニットテスト + Viteビルド + Electronビルド（Windows）を実行。
+- **リリースビルド**: `v*` 形式のタグをpushすると `.github/workflows/release.yml` が起動し、Windows portable ZIP・macOS DMG/ZIP・Web distをビルドしてGitHub Releaseにアセットとして添付。タグのバージョンがビルド時に `package.json` へ注入される。
+- **PRビルドチェック**: `.github/workflows/pr-build-check.yml` が `main` へのPR時（`src/`・`electron/`・`package.json`・`vite.config.js` 変更時）に Windows・macOS 両環境で `npm run build` を実行しPRにコメント。
+- **ドラフトリリース**: `.github/workflows/draft-release.yml` がタグpush時に変更履歴を自動収集してドラフトリリースを作成。
+- **成果物検証**: `.github/workflows/verify-artifacts.yml` がリリースビルド完了後にWindows・macOS（x64/arm64）で起動テストを実施。
+
+リリース手順：`vX.Y.Z` タグを作成してpushするだけ。以降はCIが自動処理する。
+
+### テスト
+
+Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
+
+- `react-plotly.js`（Canvas/WebGLエラー回避のため、プレーンな `<div>` をレンダリング）
+- `HTMLCanvasElement.getContext`
+- `URL.createObjectURL`

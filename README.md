@@ -1,12 +1,16 @@
 # Reflectance Spectra Viewer
 
-反射スペクトルビューアーアプリケーション。FT-IR測定データ（CSV形式）を表示可能。
+反射スペクトル・XRDパターン・温度プロファイルなど、2列形式の科学データを表示するデスクトップアプリケーション。
 
 ## 特徴
 
-- WebGLによる描画（Plotly.js）
-- クロスヘア、凡例操作、カラーピッカー搭載
-- Windows/macOS対応
+- WebGLによる高速描画（Plotly.js）
+- CSV / DPT / RELAB TAB / ASC / TXT 形式に対応
+- 複数ファイル同時表示・グループ管理
+- ドラッグ＆ドロップでファイル読み込み
+- クロスヘア、カラーピッカー、凡例ソート搭載
+- 軸ラベル・表示範囲をUIから直接設定
+- Windows / macOS 対応
 
 ## ダウンロード
 
@@ -14,20 +18,16 @@
 
 ### Windows
 
-- `Reflectance-Spectra-Viewer-portable.zip` をダウンロード
-- 解凍して `Reflectance Spectra Viewer.exe` を実行
+`Reflectance-Spectra-Viewer-vX.Y.Z_win.zip` をダウンロードして解凍し、`Reflectance Spectra Viewer.exe` を実行。
 
 ### macOS
 
-**Intel Mac (x64)**
-- `Reflectance Spectra Viewer-x.x.x-x64.dmg` をダウンロード
+| Mac の種類 | ダウンロードファイル |
+|-----------|------------------|
+| Intel | `Reflectance.Spectra.Viewer-X.Y.Z_mac_x64.dmg` |
+| Apple Silicon | `Reflectance.Spectra.Viewer-X.Y.Z_mac_arm64.dmg` |
 
-**Apple Silicon (M1/M2/M3)**
-- `Reflectance Spectra Viewer-x.x.x-arm64.dmg` をダウンロード
-
-**初回起動時の注意**
-
-macOSでは「開発元が未確認」の警告が表示されます。
+**初回起動時の注意**（「開発元が未確認」の警告が出る場合）
 
 1. アプリを右クリック → "開く" を選択
 2. 警告ダイアログで再度 "開く" をクリック
@@ -35,22 +35,83 @@ macOSでは「開発元が未確認」の警告が表示されます。
 
 ## 使い方
 
-1. アプリを起動
-2. 「ファイルを追加」を押して、CSV形式のファイルを読み込む（複数一括読み込み可能）
-3. グラフが表示されます
+### 起動フロー
+
+1. アプリを起動するとデータタイプ選択ダイアログが表示される
+2. データに合ったプリセットを選択（下表参照）
+3. ファイルを読み込む（ボタンまたはドラッグ＆ドロップ）
+
+| プリセット | 軸設定 | 対応フォーマット |
+|-----------|--------|----------------|
+| Reflectance Spectra | Wavelength (μm) / Reflectance | CSV, DPT, TAB+XML |
+| XRD Pattern | 2θ (°) / Intensity | CSV, ASC |
+| Temperature Profile | Time (s) / Temperature (°C) | TXT (InfraWin) |
+| Auto | ファイル内容から自動判定 | すべて |
+
+### 操作方法
+
+| 操作 | 方法 |
+|------|------|
+| ファイル追加 | ツールバーの「ファイル追加」ボタン、またはウィンドウへドラッグ＆ドロップ |
+| 個別削除 | 左パネルの ✕ ボタン |
+| 全削除 | ツールバーの「全てクリア」ボタン |
+| 表示/非表示 | 左パネルのチェックボックス |
+| 色変更 | 左パネルのカラーボックスをクリック |
+| ズーム | グラフ上をドラッグで矩形選択 |
+| ズームリセット | ダブルクリック または「ズームリセット」ボタン |
+| 表示範囲指定 | ツールバーの X/Y min・max 入力欄に数値を入力して Enter |
+| 軸ラベル変更 | ツールバーの「軸ラベル設定」ボタン |
+| 凡例ソート | 左パネル上部のソートボタン（ファイル名/拡張子、昇順/降順） |
+| グループ切替 | 左パネルの番号ボタンをクリック |
+| グループ間移動 | 左パネルのトレースをグループボタンへドラッグ |
+| グループ間コピー | 同上（Ctrl を押しながらドロップ） |
 
 ### 対応フォーマット
 
-ファイルは以下の形式に対応（ヘッダーなし）:
+#### CSV
+
+ヘッダーあり・なし両方を自動判定：
+
+```
+Wavelength,Reflectance
+0.38,0.123
+0.39,0.124
+```
+
+または
 
 ```
 0.38,0.123
 0.39,0.124
-...
 ```
 
-- 1列目: 波長（um, 横軸）
-- 2列目: 反射率（縦軸）
+#### DPT（OPUS ソフトウェア出力）
+
+カンマ区切り2列のテキストファイル。ヘッダーなし。
+
+```
+0.38,0.123
+0.39,0.124
+```
+
+> **注意**: DPT はカンマ区切りのみ対応。スペース区切りは読み込めません。
+
+#### RELAB PDS4（TAB + XML）
+
+XML ラベルファイルと TAB データファイルのペア。XML を先に読み込んでから TAB を読み込むと自動認識。波長はアプリ内で nm → μm に自動変換。
+
+#### ASC（XRD データ）
+
+空白区切り2列（2θ, Intensity）のテキストファイル：
+
+```
+10.00 120
+10.05 135
+```
+
+#### TXT（温度測定データ・InfraWin 出力）
+
+2行目に `This document contains measurement data of the following devices:` を含むファイルを自動判定。時間データを 0 秒始まりに自動変換。
 
 ## 動作確認済み環境
 
@@ -59,44 +120,40 @@ macOSでは「開発元が未確認」の警告が表示されます。
 
 ## 開発者向け
 
-### ソースからビルドする場合
+### ビルド手順
 
 ```bash
 git clone https://github.com/Flint8777/Reflectance-Spectra.git
-cd Reflectance-Spectra/Release
-npm install
-npm run build
-npm run electron:build:win  # Windows
-npm run electron:build:mac  # macOS
+cd Reflectance-Spectra
+npm ci
+npm run electron:build:win   # Windows
+npm run electron:build:mac   # macOS
 ```
 
-### 配布用ZIPの作成
+### Windows 配布用 ZIP 作成
 
 ```bash
-cd Release
-npm run electron:build:win  # ビルド実行
-npm run pack:zip             # ZIP化（Windowsのみ）
+npm run electron:build:win
+npm run pack:zip
 ```
 
-生成物: `Release/dist-electron/Reflectance-Spectra-Viewer-portable.zip`
+生成物: `dist-electron/Reflectance-Spectra-Viewer-vX.Y.Z_win.zip`
 
-### 使った技術スタック
+### テスト実行
+
+```bash
+npm run test:run
+```
+
+### 使用技術
 
 - Electron 28
 - React 18
-- Plotly.js (WebGL)
+- Plotly.js（WebGL）
 - Vite 5
+- PapaParse（CSV解析）
 
-## 変更履歴
+### CI/CD
 
-### v2.1.4 (2025-11-08)
+タグ（`vX.Y.Z`）を push すると GitHub Actions が自動的に Windows / macOS 向けビルドを作成し、GitHub Release にアセットとして添付します。詳細は `GITHUB_ACTIONS.md` を参照。
 
-- Electron デスクトップアプリ版リリース
-- WebGL による高速描画対応
-- macOS 自動ビルド（CI）追加
-
-### 以前のバージョン（Prototype）
-git checkout main
-git pull origin maingit checkout main
-git pull origin main
-- Python + PyQt5 版（v1.x）は `ver-1.1.0` ブランチを参照

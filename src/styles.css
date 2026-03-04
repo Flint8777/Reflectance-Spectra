@@ -1,0 +1,782 @@
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.app {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.toolbar {
+    padding: 8px 12px;
+    gap: 8px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #ddd;
+    background: #f5f5f5;
+}
+
+.toolbar button {
+    padding: 6px 12px;
+}
+
+/* アイコンボタングループ */
+.toolbar-icon-buttons {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    background: white;
+    padding: 0 6px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    height: 40px;
+    /* 統一高さ */
+}
+
+.icon-button {
+    padding: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    color: #333;
+}
+
+.icon-button:hover:not(:disabled) {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.icon-button:active:not(:disabled) {
+    background: #bbdefb;
+}
+
+.icon-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.icon-button svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* メインエリア（凡例 + グラフ） */
+.main-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+
+
+/* グループパネル */
+.group-panel {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    align-items: center;
+}
+
+.group-item {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #f7f7f7;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .group-item.show {
+        background: #e8f7ea;
+        border-color: #8fd19e;
+        color: #0a6b2b;
+    }
+
+    .group-item.hide {
+        background: #fdeaea;
+        border-color: #f5a3a3;
+        color: #8a1f1f;
+    }
+
+    cursor: pointer;
+    user-select: none;
+}
+
+.group-item.active {
+    background: #e6f0ff;
+    border-color: #7aa7ff;
+}
+
+/* 状態優先（activeよりshow/hideを優先） */
+.group-item.active.show {
+    background: #e8f7ea;
+    border-color: #8fd19e;
+    color: #0a6b2b;
+}
+
+.group-add-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid #888;
+    background: #ffffff;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.group-add-btn:hover {
+    background: #eef5ff;
+    border-color: #5d9bff;
+}
+
+.group-item.active.hide {
+    background: #fdeaea;
+    border-color: #f5a3a3;
+    color: #8a1f1f;
+}
+
+/* 左側の凡例パネル */
+.legend-panel {
+    width: 350px;
+    min-width: 300px;
+    max-width: 450px;
+    border-right: 1px solid #ddd;
+    display: flex;
+    flex-direction: column;
+    background: #fafafa;
+}
+
+.legend-sort-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-bottom: 1px solid #eee;
+    background: #fdfdfd;
+}
+
+.legend-sort-bar .icon-button {
+    padding: 6px;
+}
+
+.legend-sort-bar .icon-button:hover {
+    background: #eef6ff;
+    color: #1976d2;
+}
+
+.legend-title {
+    padding: 12px;
+    font-weight: bold;
+    font-size: 14px;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+    background: #e8e8e8;
+}
+
+/* Unloadボタン（ゴミ箱アイコンのみ。背景の四角を除去） */
+.legend-item .unload-btn {
+    border: none;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #c00;
+}
+
+.legend-item .unload-btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+}
+
+.legend-item .unload-btn:hover {
+    color: #ff3b3b;
+}
+
+.legend-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: white;
+}
+
+.legend-item input[type="checkbox"] {
+    flex-shrink: 0;
+    cursor: pointer;
+}
+
+.legend-item .color-box {
+    width: 30px;
+    height: 20px;
+    border: 1px solid #999;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.legend-item .filename {
+    flex: 1;
+    font-size: 12px;
+    overflow-wrap: break-word;
+    word-break: break-all;
+}
+
+.viewer {
+    flex: 1;
+    position: relative;
+}
+
+.plot-wrap {
+    position: absolute;
+    inset: 0;
+}
+
+/* クロスヘアオーバーレイ - マウス移動のみ検出、クリック/ドラッグは下に通す */
+.crosshair-overlay {
+    position: absolute;
+    inset: 0;
+    cursor: none;
+    pointer-events: none;
+    /* すべてのイベントを下のPlotlyに通す */
+}
+
+.crosshair-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.cross-vert {
+    position: absolute;
+    top: 0;
+    width: 1px;
+    height: 100%;
+    background: rgba(255, 0, 0, 0.9);
+    transform: translateX(-0.5px);
+}
+
+.cross-hori {
+    position: absolute;
+    left: 0;
+    height: 1px;
+    width: 100%;
+    background: rgba(255, 0, 0, 0.9);
+    transform: translateY(-0.5px);
+}
+
+.coords {
+    position: absolute;
+    right: 8px;
+    top: 60px;
+    /* Plotlyツールバーの下に配置 */
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #333;
+    padding: 8px 10px;
+    font-size: 18px;
+    font-weight: bold;
+    border-radius: 4px;
+    line-height: 1.5;
+    z-index: 100;
+    /* ツールバーより前面に */
+}
+
+/* ダイアログオーバーレイ */
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.dialog-box {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 700px;
+    min-width: 500px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dialog-box h3 {
+    margin: 0 0 16px 0;
+    font-size: 20px;
+    color: #333;
+}
+
+.dialog-box h4 {
+    margin: 16px 0 8px 0;
+    font-size: 16px;
+    color: #555;
+}
+
+.dialog-box p {
+    margin: 0 0 16px 0;
+    color: #666;
+    line-height: 1.5;
+}
+
+/* ヘッダー選択ダイアログ */
+.header-candidates {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.header-candidate-btn {
+    padding: 12px 16px;
+    background: #f0f0f0;
+    border: 2px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-align: left;
+    transition: all 0.2s;
+}
+
+.header-candidate-btn:hover {
+    background: #e0e0e0;
+    border-color: #999;
+}
+
+/* プリセット・カスタムダイアログ */
+.preset-section,
+.custom-section {
+    margin-bottom: 20px;
+}
+
+.preset-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.preset-btn {
+    padding: 10px 16px;
+    background: #f5f5f5;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.preset-btn:hover {
+    background: #e8e8e8;
+    border-color: #bbb;
+}
+
+.preset-btn.selected {
+    background: #d0e8ff;
+    border-color: #2196F3;
+    font-weight: bold;
+}
+
+/* Unit Selection Dialog enhancements */
+.unit-dialog {
+    padding: 24px 24px 18px 24px;
+}
+
+.unit-dialog-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.unit-dialog-header svg {
+    color: #2196F3;
+}
+
+.unit-dialog-subtitle {
+    font-size: 12px;
+    color: #666;
+}
+
+.unit-dialog-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #f7faff;
+    border: 1px solid #cfe3ff;
+    color: #1a3a6d;
+    padding: 6px 10px;
+    border-radius: 6px;
+    margin: 8px 0 14px 0;
+}
+
+.unit-file-icon svg {
+    color: #1a73e8;
+}
+
+.unit-file-name {
+    font-weight: 600;
+}
+
+.unit-dialog-desc {
+    background: #fbfbfb;
+    border: 1px dashed #ddd;
+    padding: 10px 12px;
+    border-radius: 6px;
+    color: #444;
+    margin-bottom: 14px;
+    font-size: 13px;
+}
+
+.unit-dialog-options {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.unit-dialog-options .preset-btn {
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 14px;
+}
+
+.unit-dialog-options .preset-btn.accent {
+    background: #e3f2fd;
+    border-color: #90caf9;
+}
+
+.unit-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* データタイプ選択アイコンボタン */
+.datatype-icon-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 24px;
+    flex-wrap: wrap;
+}
+
+.datatype-icon-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 16px 20px;
+    background: #f9f9f9;
+    border: 2px solid #ddd;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    min-width: 120px;
+    flex: 1;
+    max-width: 150px;
+}
+
+.datatype-icon-btn:hover {
+    background: #e3f2fd;
+    border-color: #2196F3;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+}
+
+.datatype-icon-btn:active {
+    transform: translateY(0);
+}
+
+.datatype-icon-btn svg {
+    color: #555;
+    transition: color 0.3s;
+}
+
+.datatype-icon-btn:hover svg {
+    color: #2196F3;
+}
+
+.datatype-icon-btn span {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+}
+
+.input-group {
+    margin-bottom: 12px;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+    color: #333;
+}
+
+.input-group input[type="text"] {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.input-group input[type="text"]:focus {
+    outline: none;
+    border-color: #2196F3;
+}
+
+.dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.apply-btn,
+.cancel-btn {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s;
+}
+
+.apply-btn {
+    background: #2196F3;
+    color: white;
+}
+
+.apply-btn:hover {
+    background: #1976D2;
+}
+
+.cancel-btn {
+    background: #e0e0e0;
+    color: #333;
+}
+
+.cancel-btn:hover {
+    background: #d0d0d0;
+}
+
+/* インライン範囲入力欄 */
+.inline-range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 12px;
+    padding: 0 8px;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    height: 40px;
+    /* 統一高さ */
+}
+
+.inline-range-inputs span {
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+}
+
+.inline-range-inputs input[type='number'] {
+    width: 70px;
+    padding: 3px 6px;
+    font-size: 12px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.inline-apply-btn {
+    padding: 4px 6px;
+    font-size: 11px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.inline-apply-btn:hover {
+    background: #45a049;
+}
+
+.inline-apply-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.inline-range-inputs button:not(.inline-apply-btn) {
+    padding: 3px 10px;
+    font-size: 11px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.inline-range-inputs button:hover {
+    background: #45a049;
+}
+
+/* 範囲指定ダイアログ */
+.range-inputs-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.range-inputs-dialog .input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.range-inputs-dialog .input-group label {
+    min-width: 100px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.range-inputs-dialog .input-group input {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 14px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+/* コンテキストメニュー */
+.context-menu {
+    position: fixed;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    z-index: 10000;
+    min-width: 220px;
+}
+
+.context-menu-title {
+    font-weight: bold;
+    font-size: 14px;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ddd;
+}
+
+.context-menu-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.context-menu-inputs .input-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.context-menu-inputs .input-group label {
+    min-width: 60px;
+    font-size: 13px;
+}
+
+.context-menu-inputs .input-group input {
+    flex: 1;
+    padding: 4px 8px;
+    font-size: 13px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.context-menu-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.context-menu-actions button {
+    padding: 5px 12px;
+    font-size: 12px;
+}
+
+/* 軸ラベル（右クリック可能） */
+.axis-labels {
+    pointer-events: none;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+.x-axis-label,
+.y-axis-label {
+    position: absolute;
+    pointer-events: auto;
+    cursor: context-menu;
+    padding: 4px 8px;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    user-select: none;
+}
+
+.x-axis-label {
+    bottom: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.y-axis-label {
+    top: 15px;
+    left: 15px;
+    writing-mode: horizontal-tb;
+}
+
+.x-axis-label:hover,
+.y-axis-label:hover {
+    background: rgba(255, 255, 200, 0.9);
+}
