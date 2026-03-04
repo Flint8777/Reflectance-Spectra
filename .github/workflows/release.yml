@@ -73,7 +73,7 @@ jobs:
 
   build-macos-x64:
     name: Build macOS (x64) dmg/zip
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,15 +94,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Ensure Rollup native binary (macOS x64)
+      - name: Ensure Rollup native binary (macOS arm64)
         run: |
           VER=$(node -p "require('rollup/package.json').version")
-          npm i -D @rollup/rollup-darwin-x64@"${VER}"
+          npm i -D @rollup/rollup-darwin-arm64@"${VER}"
 
-      - name: Build macOS app (no publish)
+      - name: Build macOS app x64 (cross-compile on arm64)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: npm run electron:build:mac -- --publish=never
+        run: npm run electron:build:mac -- --publish=never --x64
 
       - name: Rename macOS artifacts
         run: |

@@ -49,7 +49,7 @@ jobs:
 
   verify-macos-x64:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Download macOS x64 artifact
         uses: actions/download-artifact@v4
