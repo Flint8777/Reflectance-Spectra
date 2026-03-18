@@ -104,6 +104,23 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run electron:build:mac -- --publish=never --x64
 
+      - name: Ad-hoc codesign and re-create x64 DMG
+        run: |
+          app=$(find dist-electron -path "*/mac*/*.app" -type d | head -n1)
+          codesign --force --deep --sign - "$app"
+          echo "Signed: $app"
+          rm -f dist-electron/*.dmg
+          staging=$(mktemp -d)
+          cp -R "$app" "$staging/"
+          ln -s /Applications "$staging/Applications"
+          VERSION=$(node -p 'require("./package.json").version')
+          hdiutil create \
+            -volname "Reflectance Spectra Viewer" \
+            -srcfolder "$staging" \
+            -ov -format UDZO \
+            "dist-electron/Reflectance Spectra Viewer-${VERSION}-x64.dmg"
+          rm -rf "$staging"
+
       - name: Rename macOS x64 DMG
         run: |
           mkdir -p dist-electron/renamed
@@ -158,6 +175,23 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run electron:build:mac -- --publish=never
+
+      - name: Ad-hoc codesign and re-create arm64 DMG
+        run: |
+          app=$(find dist-electron -path "*/mac*/*.app" -type d | head -n1)
+          codesign --force --deep --sign - "$app"
+          echo "Signed: $app"
+          rm -f dist-electron/*.dmg
+          staging=$(mktemp -d)
+          cp -R "$app" "$staging/"
+          ln -s /Applications "$staging/Applications"
+          VERSION=$(node -p 'require("./package.json").version')
+          hdiutil create \
+            -volname "Reflectance Spectra Viewer" \
+            -srcfolder "$staging" \
+            -ov -format UDZO \
+            "dist-electron/Reflectance Spectra Viewer-${VERSION}-arm64.dmg"
+          rm -rf "$staging"
 
       - name: Rename macOS arm64 DMG
         run: |
