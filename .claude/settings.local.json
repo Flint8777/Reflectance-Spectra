@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh release:*)",
+      "Bash(gh run:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr:*)",
+      "Bash(git pull:*)",
+      "Bash(git tag:*)",
+      "Bash(for tag:*)",
+      "Bash(do)",
+      "Bash(echo \"=== $tag ===\")",
+      "Bash(done)",
+      "Bash(git branch:*)",
+      "Bash(do echo:*)",
+      "Bash(bash scripts/release-notes.sh v2.3.2)"
+    ]
+  }
+}
