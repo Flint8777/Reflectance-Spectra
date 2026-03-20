@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "intercept",
+            "command": "bash -c \"echo \\\"$CLAUDE_TOOL_INPUT\\\" | grep -q 'package-lock.json' && echo 'BLOCK: package-lock.jsonは直接編集禁止。npm installを使ってください' || true\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c \"echo \\\"$CLAUDE_TOOL_INPUT\\\" | grep -qE '\\.(jsx|js)\\\"' && npx vitest run --reporter=dot 2>&1 | tail -5 || true\""
+          }
+        ]
+      }
+    ]
+  }
+}
