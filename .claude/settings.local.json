@@ -16,7 +16,9 @@
       "Bash(done)",
       "Bash(git branch:*)",
       "Bash(do echo:*)",
-      "Bash(bash scripts/release-notes.sh v2.3.2)"
+      "Bash(bash scripts/release-notes.sh v2.3.2)",
+      "Bash(npx vitest:*)",
+      "Skill(commit-commands:commit)"
     ]
   }
 }
