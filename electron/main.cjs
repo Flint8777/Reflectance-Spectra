@@ -13,19 +13,28 @@ if (isDev) {
     process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 }
 
+const pkgPath = path.join(__dirname, '../package.json')
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
+const currentVersion = pkg.version
+const RELEASES_URL = 'https://api.github.com/repos/Flint8777/Reflectance-Spectra/releases/latest'
+const REDIRECT_CODES = [301, 302, 307, 308]
 
 // ---- ヘルパー関数 ----
 
+function httpOptions(url) {
+    const urlObj = new URL(url)
+    return {
+        hostname: urlObj.hostname,
+        path: urlObj.pathname + urlObj.search,
+        headers: { 'User-Agent': 'Reflectance-Spectra-Viewer' }
+    }
+}
+
 function fetchJson(url) {
     return new Promise((resolve, reject) => {
-        const urlObj = new URL(url)
-        const options = {
-            hostname: urlObj.hostname,
-            path: urlObj.pathname + urlObj.search,
-            headers: { 'User-Agent': 'Reflectance-Spectra-Viewer' }
-        }
-        https.get(options, res => {
-            if ([301, 302, 307, 308].includes(res.statusCode)) {
+        https.get(httpOptions(url), res => {
+            if (REDIRECT_CODES.includes(res.statusCode)) {
+                res.destroy()
                 resolve(fetchJson(res.headers.location))
                 return
             }
@@ -43,14 +52,9 @@ function fetchJson(url) {
 function downloadFile(url, dest, onProgress) {
     return new Promise((resolve, reject) => {
         const doDownload = (downloadUrl) => {
-            const urlObj = new URL(downloadUrl)
-            const options = {
-                hostname: urlObj.hostname,
-                path: urlObj.pathname + urlObj.search,
-                headers: { 'User-Agent': 'Reflectance-Spectra-Viewer' }
-            }
-            https.get(options, res => {
-                if ([301, 302, 307, 308].includes(res.statusCode)) {
+            https.get(httpOptions(downloadUrl), res => {
+                if (REDIRECT_CODES.includes(res.statusCode)) {
+                    res.destroy()
                     doDownload(res.headers.location)
                     return
                 }
@@ -94,25 +98,21 @@ ipcMain.handle('get-platform', () => process.platform)
 
 ipcMain.handle('open-external', (_event, url) => shell.openExternal(url))
 
+let cachedRelease = null
+
 ipcMain.handle('check-update', async () => {
-    const pkgPath = path.join(__dirname, '../package.json')
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-    const currentVersion = pkg.version
-    const release = await fetchJson('https://api.github.com/repos/Flint8777/Reflectance-Spectra/releases/latest')
-    const latestVersion = release.tag_name.replace(/^v/, '')
+    cachedRelease = await fetchJson(RELEASES_URL)
+    const latestVersion = cachedRelease.tag_name.replace(/^v/, '')
     const hasUpdate = compareVersions(latestVersion, currentVersion) > 0
-    return { hasUpdate, currentVersion, latestVersion, releaseUrl: release.html_url }
+    return { hasUpdate, currentVersion, latestVersion, releaseUrl: cachedRelease.html_url }
 })
 
 ipcMain.handle('download-apply-update', async (event) => {
     if (!app.isPackaged) {
         throw new Error('アップデートは本番版のみサポートされています')
     }
-    const pkgPath = path.join(__dirname, '../package.json')
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-    const currentVersion = pkg.version
 
-    const release = await fetchJson('https://api.github.com/repos/Flint8777/Reflectance-Spectra/releases/latest')
+    const release = cachedRelease || await fetchJson(RELEASES_URL)
     const latestVersion = release.tag_name.replace(/^v/, '')
     if (compareVersions(latestVersion, currentVersion) <= 0) {
         throw new Error('すでに最新バージョンです')
@@ -179,15 +179,7 @@ ipcMain.handle('download-apply-update', async (event) => {
 // ---- ウィンドウ作成 ----
 
 function createWindow() {
-    // package.jsonからversionを取得
-    const pkgPath = path.join(__dirname, '../package.json')
-    let version = ''
-    try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
-        version = pkg.version ? ` (v${pkg.version})` : ''
-    } catch (e) {
-        version = ''
-    }
+    const version = currentVersion ? ` (v${currentVersion})` : ''
 
     const win = new BrowserWindow({
         width: 1400,

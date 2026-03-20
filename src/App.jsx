@@ -28,6 +28,26 @@ const palette = [
     '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'
 ]
 
+const PRESET_LABELS = {
+    'wavelength-reflectance': { x: 'Wavelength (μm)', y: 'Reflectance' },
+    'spacing-intensity': { x: '2θ (°)', y: 'Intensity' },
+    'time-temperature': { x: 'Time (s)', y: 'Temperature (°C)' },
+}
+
+function parseWhitespaceSeparated(text) {
+    const lines = text.split(/\r?\n/)
+    const xs = [], ys = []
+    for (const ln of lines) {
+        const t = ln.trim()
+        if (!t || t.startsWith('#')) continue
+        const cols = t.split(/\s+/).filter(Boolean)
+        if (cols.length < 2) continue
+        const x = parseFloat(cols[0]), y = parseFloat(cols[1])
+        if (Number.isFinite(x) && Number.isFinite(y)) { xs.push(x); ys.push(y) }
+    }
+    return { x: xs, y: ys }
+}
+
 function parseDPT(text) {
     const lines = text.split(/\r?\n/)
     const xs = []
@@ -299,7 +319,6 @@ export default function App() {
     const [headerCandidates, setHeaderCandidates] = useState([])
     const [showHeaderDialog, setShowHeaderDialog] = useState(false)
     const [showLabelDialog, setShowLabelDialog] = useState(false)
-    const [loadedCount, setLoadedCount] = useState(0)
     const [presetSelected, setPresetSelected] = useState(null)
     const [showPresetDialog, setShowPresetDialog] = useState(true)
     const [lockedLabels, setLockedLabels] = useState(false)
@@ -335,8 +354,14 @@ export default function App() {
         const newInfos = []
         const newGroupIds = []
         const detectedHeaders = []
-        // 現在のカラー開始位置を参照（状態更新の非同期性の影響を回避）
-        let colorIdx = nextColorIdxRef.current
+
+        const addTrace = (x, y, file, header) => {
+            const idx = nextColorIdxRef.current; nextColorIdxRef.current = idx + 1
+            newTraces.push({ x, y, type: 'scattergl', mode: 'lines', line: { color: palette[idx % palette.length], width: 1.5 }, name: file.name })
+            newInfos.push(file.name)
+            newGroupIds.push(activeGroupId)
+            detectedHeaders.push(header)
+        }
 
         const tasks = files.map(file => new Promise(resolve => {
             const lname = file.name.toLowerCase()
@@ -363,12 +388,8 @@ export default function App() {
                         if (Number.isFinite(xv) && Number.isFinite(yv)) { x.push(xv); y.push(yv) }
                     }
                     if (x.length) { const start = x[0]; for (let i = 0; i < x.length; i++) x[i] -= start }
-                    const idx = nextColorIdxRef.current; nextColorIdxRef.current = idx + 1
-                    newTraces.push({ x, y, type: 'scattergl', mode: 'lines', line: { color: palette[idx % palette.length], width: 1.5 }, name: file.name })
-                    newInfos.push(file.name)
-                    newGroupIds.push(activeGroupId)
-                    detectedHeaders.push({ xLabel: 'Time (s)', yLabel: 'Temperature (°C)' })
-                    if (!lockedLabels) { setXLabel('Time (s)'); setYLabel('Temperature (°C)') }
+                    addTrace(x, y, file, PRESET_LABELS['time-temperature'])
+                    if (!lockedLabels) { setXLabel(PRESET_LABELS['time-temperature'].x); setYLabel(PRESET_LABELS['time-temperature'].y) }
                     resolve(); return
                 }
 
@@ -394,21 +415,15 @@ export default function App() {
                                     const xv = Number(row[xKey]); const yv = Number(row[yKey])
                                     if (Number.isFinite(xv) && Number.isFinite(yv)) { x.push(xv); y.push(yv) }
                                 }
-                                detectedHeaders.push({ xLabel: headerX, yLabel: headerY })
                             } else {
                                 for (const row of res.data) {
                                     if (!row || row.length < 2) continue
                                     const xv = Number(row[0]); const yv = Number(row[1])
                                     if (Number.isFinite(xv) && Number.isFinite(yv)) { x.push(xv); y.push(yv) }
                                 }
-                                detectedHeaders.push(null)
                             }
-                            let xData = x
-                            if (presetSelected === 'wavelength-reflectance' && unitOverride === 'nm') xData = xData.map(v => v / 1000)
-                            const idx = nextColorIdxRef.current; nextColorIdxRef.current = idx + 1
-                            newTraces.push({ x: xData, y, type: 'scattergl', mode: 'lines', line: { color: palette[idx % palette.length], width: 1.5 }, name: file.name })
-                            newInfos.push(file.name)
-                            newGroupIds.push(activeGroupId)
+                            const xData = (presetSelected === 'wavelength-reflectance' && unitOverride === 'nm') ? x.map(v => v / 1000) : x
+                            addTrace(xData, y, file, hasHeader ? { xLabel: headerX, yLabel: headerY } : null)
                             resolve()
                         }
                     })
@@ -451,62 +466,30 @@ export default function App() {
                     // ルール: RELAB TABはnm保存なのでμmへ変換（1/1000）。
                     // 上記はXMLメタあり/なし双方に適用。
                     if (x.length) x = x.map(v => v / 1000);
-                    const idx = nextColorIdxRef.current; nextColorIdxRef.current = idx + 1
-                    newTraces.push({ x, y, type: 'scattergl', mode: 'lines', line: { color: palette[idx % palette.length], width: 1.5 }, name: file.name });
-                    newInfos.push(file.name);
-                    newGroupIds.push(activeGroupId)
-                    detectedHeaders.push({ xLabel: 'Wavelength (μm)', yLabel: 'Reflectance' });
-                    if (!lockedLabels) { setXLabel('Wavelength (μm)'); setYLabel('Reflectance'); }
+                    addTrace(x, y, file, PRESET_LABELS['wavelength-reflectance'])
+                    if (!lockedLabels) { setXLabel(PRESET_LABELS['wavelength-reflectance'].x); setYLabel(PRESET_LABELS['wavelength-reflectance'].y) }
                     resolve(); return;
                 }
 
                 if (ext === 'dpt') {
                     const { x, y } = parseDPT(text)
                     if (!x.length) { resolve(); return }
-                    const idx = nextColorIdxRef.current; nextColorIdxRef.current = idx + 1
-                    newTraces.push({ x, y, type: 'scattergl', mode: 'lines', line: { color: palette[idx % palette.length], width: 1.5 }, name: file.name })
-                    newInfos.push(file.name)
-                    newGroupIds.push(activeGroupId)
-                    detectedHeaders.push({ xLabel: 'Wavelength (μm)', yLabel: 'Reflectance' })
-                    if (!lockedLabels) { setXLabel('Wavelength (μm)'); setYLabel('Reflectance') }
+                    addTrace(x, y, file, PRESET_LABELS['wavelength-reflectance'])
+                    if (!lockedLabels) { setXLabel(PRESET_LABELS['wavelength-reflectance'].x); setYLabel(PRESET_LABELS['wavelength-reflectance'].y) }
                     resolve(); return
                 }
 
-                // XRD ASCII (.asc) support: whitespace-separated two numeric columns (2θ, Intensity)
                 if (ext === 'asc') {
-                    const x = []; const y = []
-                    for (const ln of lines) {
-                        const t = ln.trim(); if (!t || t.startsWith('#')) continue
-                        const cols = t.split(/\s+/).filter(Boolean)
-                        if (cols.length < 2) continue
-                        const xv = parseFloat(cols[0]); const yv = parseFloat(cols[1])
-                        if (Number.isFinite(xv) && Number.isFinite(yv)) { x.push(xv); y.push(yv) }
-                    }
+                    const { x, y } = parseWhitespaceSeparated(text)
                     if (!x.length) { resolve(); return }
-                    const idx = nextColorIdxRef.current; nextColorIdxRef.current = idx + 1
-                    newTraces.push({ x, y, type: 'scattergl', mode: 'lines', line: { color: palette[idx % palette.length], width: 1.5 }, name: file.name })
-                    newInfos.push(file.name)
-                    newGroupIds.push(activeGroupId)
-                    detectedHeaders.push({ xLabel: '2θ (°)', yLabel: 'Intensity' })
-                    if (!lockedLabels) { setXLabel('2θ (°)'); setYLabel('Intensity') }
+                    addTrace(x, y, file, PRESET_LABELS['spacing-intensity'])
+                    if (!lockedLabels) { setXLabel(PRESET_LABELS['spacing-intensity'].x); setYLabel(PRESET_LABELS['spacing-intensity'].y) }
                     resolve(); return
                 }
 
-                const x = []; const y = []
-                for (const ln of lines) {
-                    const t = ln.trim(); if (!t || t.startsWith('#')) continue
-                    const cols = t.split(/[\s\t]+/).filter(Boolean)
-                    if (cols.length < 2) continue
-                    const xv = parseFloat(cols[0]); const yv = parseFloat(cols[1])
-                    if (Number.isFinite(xv) && Number.isFinite(yv)) { x.push(xv); y.push(yv) }
-                }
-                let xData = x
-                if (presetSelected === 'wavelength-reflectance' && unitOverride === 'nm') xData = xData.map(v => v / 1000)
-                const idx = nextColorIdxRef.current; nextColorIdxRef.current = idx + 1
-                newTraces.push({ x: xData, y, type: 'scattergl', mode: 'lines', line: { color: palette[idx % palette.length], width: 1.5 }, name: file.name })
-                newInfos.push(file.name)
-                newGroupIds.push(activeGroupId)
-                detectedHeaders.push(null)
+                const { x, y } = parseWhitespaceSeparated(text)
+                const xData = (presetSelected === 'wavelength-reflectance' && unitOverride === 'nm') ? x.map(v => v / 1000) : x
+                addTrace(xData, y, file, null)
                 resolve()
             }
             reader.readAsText(file)
@@ -530,7 +513,7 @@ export default function App() {
             setFilesInfo(prev => [...prev, ...sortedInfos])
             setVisibility(prev => [...prev, ...sortedTraces.map(() => true)])
             setTraceGroupIds(prev => [...prev, ...sortedGroupIds])
-            setLoadedCount(prev => prev + newInfos.length)
+
             if (!lockedLabels) {
                 const valid = detectedHeaders.filter(h => h)
                 if (valid.length) {
@@ -542,10 +525,9 @@ export default function App() {
             }
             setXRange(null); setYRange(null)
         })
-    }, [traces.length, relabMeta, lockedLabels, presetSelected, activeGroupId])
+    }, [relabMeta, lockedLabels, presetSelected, activeGroupId])
 
-    const handleFiles = useCallback((e) => {
-        const files = Array.from(e.target.files || [])
+    const classifyAndAddFiles = useCallback((files) => {
         if (!files.length) return
         if (presetSelected !== 'wavelength-reflectance') { parseAndAddFiles(files); return }
         const immediate = []; const needsUnit = []
@@ -564,11 +546,15 @@ export default function App() {
         }
     }, [presetSelected, parseAndAddFiles])
 
+    const handleFiles = useCallback((e) => {
+        classifyAndAddFiles(Array.from(e.target.files || []))
+    }, [classifyAndAddFiles])
+
     const toggleVisibility = useCallback((idx) => { setVisibility(prev => { const next = [...prev]; next[idx] = !next[idx]; return next }) }, [])
     const clearAll = useCallback(() => {
         setTraces([]); setFilesInfo([]); setVisibility([]); setTraceGroupIds([])
         setXRange(null); setYRange(null)
-        setLoadedCount(0); setRelabMeta({})
+        setRelabMeta({})
         nextColorIdxRef.current = 0
     }, [])
     const resetZoom = useCallback(() => { setXRange(null); setYRange(null) }, [])
@@ -598,14 +584,17 @@ export default function App() {
 
 
     const changeColor = useCallback((idx) => {
-        const input = document.createElement('input'); input.type = 'color'
-        input.value = traces[idx]?.line?.color || '#000000'
-        input.onchange = e => {
-            const c = e.target.value
-            setTraces(prev => { const next = [...prev]; next[idx] = { ...next[idx], line: { ...next[idx].line, color: c } }; return next })
-        }
-        input.click()
-    }, [traces])
+        setTraces(prev => {
+            const input = document.createElement('input'); input.type = 'color'
+            input.value = prev[idx]?.line?.color || '#000000'
+            input.onchange = e => {
+                const c = e.target.value
+                setTraces(p => { const next = [...p]; next[idx] = { ...next[idx], line: { ...next[idx].line, color: c } }; return next })
+            }
+            input.click()
+            return prev
+        })
+    }, [])
 
     // 現在のグループのみ表示（グループ選択機能）
     const visibleTraces = useMemo(() => traces.map((t, i) => ({
@@ -627,7 +616,11 @@ export default function App() {
         const leave = () => setCross({ x: null, y: null })
         plotEl.addEventListener('mousemove', move)
         plotEl.addEventListener('mouseleave', leave)
-        return () => { plotEl.removeEventListener('mousemove', move); plotEl.removeEventListener('mouseleave', leave) }
+        return () => {
+            plotEl.removeEventListener('mousemove', move)
+            plotEl.removeEventListener('mouseleave', leave)
+            cancelAnimationFrame(animFrame.current)
+        }
     }, [onMouseMove])
 
     const dataCoord = useMemo(() => {
@@ -651,12 +644,7 @@ export default function App() {
 
     const selectHeader = useCallback(h => { setXLabel(h.xLabel); setYLabel(h.yLabel); setShowHeaderDialog(false); setHeaderCandidates([]) }, [])
     const applyLabelPreset = useCallback(preset => {
-        const presets = {
-            'wavelength-reflectance': { x: 'Wavelength (μm)', y: 'Reflectance' },
-            'spacing-intensity': { x: '2θ (°)', y: 'Intensity' },
-            'time-temperature': { x: 'Time (s)', y: 'Temperature (°C)' }
-        }
-        if (presets[preset]) { setXLabel(presets[preset].x); setYLabel(presets[preset].y) }
+        if (PRESET_LABELS[preset]) { setXLabel(PRESET_LABELS[preset].x); setYLabel(PRESET_LABELS[preset].y) }
         setShowLabelDialog(false)
     }, [])
     const applyCustomLabels = useCallback((xLbl, yLbl) => { setXLabel(xLbl); setYLabel(yLbl); setShowLabelDialog(false) }, [])
@@ -664,12 +652,7 @@ export default function App() {
     const handleInitialPreset = useCallback((preset) => {
         setPresetSelected(preset)
         if (preset !== 'auto') {
-            const map = {
-                'wavelength-reflectance': { x: 'Wavelength (μm)', y: 'Reflectance' },
-                'spacing-intensity': { x: '2θ (°)', y: 'Intensity' },
-                'time-temperature': { x: 'Time (s)', y: 'Temperature (°C)' }
-            }
-            if (map[preset]) { setXLabel(map[preset].x); setYLabel(map[preset].y) }
+            if (PRESET_LABELS[preset]) { setXLabel(PRESET_LABELS[preset].x); setYLabel(PRESET_LABELS[preset].y) }
             setLockedLabels(true)
         } else { setLockedLabels(false) }
         setShowPresetDialog(false)
@@ -680,12 +663,6 @@ export default function App() {
         if (xRange) { setXMinInput(String(xRange[0])); setXMaxInput(String(xRange[1])) }
         if (yRange) { setYMinInput(String(yRange[0])); setYMaxInput(String(yRange[1])) }
     }, [xRange, yRange])
-
-    // 初期化時に現在の長さからカラーインデックスを初期化（以降は各追加で原子的に更新）
-    React.useEffect(() => {
-        nextColorIdxRef.current = traces.length % palette.length
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
 
     // プラットフォーム取得 & 起動3秒後にアップデート自動チェック
     React.useEffect(() => {
@@ -752,23 +729,7 @@ export default function App() {
                 e.preventDefault()
                 e.stopPropagation()
                 setIsDraggingFiles(false)
-                const files = Array.from(e.dataTransfer?.files || [])
-                if (!files.length) return
-                if (presetSelected !== 'wavelength-reflectance') { parseAndAddFiles(files); return }
-                const immediate = []; const needsUnit = []
-                for (const f of files) {
-                    const ext = f.name.toLowerCase().split('.').pop()
-                    if (ext === 'tab' || ext === 'dpt' || ext === 'xml') immediate.push(f)
-                    else needsUnit.push(f)
-                }
-                if (needsUnit.length) {
-                    setUnitQueryFiles(needsUnit)
-                    setUnitSelections(needsUnit.map(() => 'um'))
-                    setUnitDialogVisible(true)
-                    setImmediateReflectanceFiles(immediate)
-                } else {
-                    parseAndAddFiles(immediate)
-                }
+                classifyAndAddFiles(Array.from(e.dataTransfer?.files || []))
             }}
             style={{ outline: isDraggingFiles ? '3px dashed #66a3ff' : 'none', outlineOffset: isDraggingFiles ? 6 : 0 }}
         >
@@ -803,10 +764,10 @@ export default function App() {
                             )}
                         </div>
                     )}
-                    {/* Quick Actions removed; group buttons now toggle Show/Hide */}
+
                 </div>
                 <input id='file-input' type='file' multiple onChange={handleFiles} style={{ display: 'none' }} />
-                {/* 旧グループ管理UI削除 */}
+
                 {Object.keys(relabMeta).length > 0 && <div style={{ marginLeft: 12, fontSize: 12, color: '#444' }}>RELAB XML loaded: {Object.keys(relabMeta).length}</div>}
                 <div className='inline-range-inputs'>
                     <span>X:</span>
@@ -818,8 +779,8 @@ export default function App() {
                     <span>~</span>
                     <input type='number' step='any' value={yMaxInput} onChange={e => setYMaxInput(e.target.value)} onKeyDown={e => handleRangeKeyDown('y', e)} placeholder='Max' />
                 </div>
-                {/* sort controls moved into legend panel */}
-                {/* Zoom説明テキスト削除 */}
+
+
                 <div
                     style={{
                         position: 'absolute',
@@ -926,7 +887,7 @@ export default function App() {
                             </button>
                         </div>
                     </div>
-                    {/* sort buttons moved next to group add button */}
+
                     <div className='legend-scroll'>
                         {(() => {
                             const items = traces.map((trace, idx) => ({ trace, idx }))
@@ -1143,14 +1104,17 @@ function LabelSettingDialog({ currentX, currentY, onApplyPreset, onApplyCustom, 
     const [customX, setCustomX] = useState(currentX)
     const [customY, setCustomY] = useState(currentY)
     const [selectedPreset, setSelectedPreset] = useState('')
-    const presets = {
-        'wavelength-reflectance': { x: 'Wavelength (μm)', y: 'Reflectance', icon: <ReflectanceSpectrumIcon />, label: 'Reflectance Spectra' },
-        'spacing-intensity': { x: '2θ (°)', y: 'Intensity', icon: <XRDIcon />, label: 'XRD Pattern' },
-        'time-temperature': { x: 'Time (s)', y: 'Temperature (°C)', icon: <ThermometerIcon />, label: 'Temperature Profile' }
+    const PRESET_ICONS = {
+        'wavelength-reflectance': { icon: <ReflectanceSpectrumIcon />, label: 'Reflectance Spectra' },
+        'spacing-intensity': { icon: <XRDIcon />, label: 'XRD Pattern' },
+        'time-temperature': { icon: <ThermometerIcon />, label: 'Temperature Profile' }
     }
+    const presets = Object.fromEntries(
+        Object.entries(PRESET_LABELS).map(([k, v]) => [k, { ...v, ...PRESET_ICONS[k] }])
+    )
     const handleSelectPreset = (p) => {
         setSelectedPreset(p)
-        if (presets[p]) { setCustomX(presets[p].x); setCustomY(presets[p].y) }
+        if (PRESET_LABELS[p]) { setCustomX(PRESET_LABELS[p].x); setCustomY(PRESET_LABELS[p].y) }
     }
     const apply = () => {
         if (selectedPreset) { onApplyPreset(selectedPreset); return }
@@ -1254,4 +1218,3 @@ function BulkUnitDialog({ files, selections, onChangeSelection, onApply }) {
     )
 }
 
-// (RangeDialog and AxisContextMenu removed per request)
