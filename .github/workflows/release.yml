@@ -262,3 +262,67 @@ jobs:
           files: web-dist-v*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-notes:
+    name: Generate release notes
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos-x64, build-macos-arm64, build-web]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate and update release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VER="${TAG#v}"
+
+          # 前回のタグを取得
+          PREV_TAG=$(git tag --sort=-v:refname | grep '^v' | sed -n '2p')
+
+          # GitHub API でchangelogを自動生成
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              -f previous_tag_name="$PREV_TAG" \
+              --jq '.body')
+          else
+            CHANGELOG=$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" \
+              --jq '.body')
+          fi
+
+          # ダウンロードセクションを付加
+          cat > release_notes.md <<EOF
+          ${CHANGELOG}
+
+          ---
+
+          ## ダウンロード
+
+          ### Windows
+          - \`Reflectance-Spectra-Viewer-${TAG}_win.zip\` — 解凍して \`Reflectance Spectra Viewer.exe\` を実行
+
+          ### macOS
+
+          **Intel Mac**
+          - \`Reflectance.Spectra.Viewer-${VER}_mac_x64.dmg\`
+
+          **Apple Silicon**
+          - \`Reflectance.Spectra.Viewer-${VER}_mac_arm64.dmg\`
+
+          > **初回起動時の注意**（「開発元が未確認」の警告が出る場合）: アプリを右クリック →「開く」→ 警告ダイアログで再度「開く」
+
+          ### Web版
+          - \`web-dist-${TAG}.zip\` — ブラウザで動作するWeb版（解凍して \`index.html\` を開く）
+
+          ---
+          EOF
+
+          # インデントを除去
+          sed -i 's/^          //' release_notes.md
+
+          gh release edit "$TAG" --notes-file release_notes.md --title "Release ${TAG}"

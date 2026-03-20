@@ -94,7 +94,7 @@ npx vitest run src/__tests__/App.test.jsx
 
 ### CI/CD
 
-`.github/workflows/` に5つのワークフローがある：`ci.yml`（テスト+ビルド）、`release.yml`（リリースビルド）、`pr-build-check.yml`（PRビルド検証）、`draft-release.yml`（ドラフトリリース作成）、`verify-artifacts.yml`（成果物検証）。
+`.github/workflows/` に4つのワークフローがある：`ci.yml`（テスト+ビルド）、`release.yml`（リリースビルド＋リリースノート自動生成）、`pr-build-check.yml`（PRビルド検証）、`verify-artifacts.yml`（成果物検証）。
 
 リリース手順：`vX.Y.Z` タグを作成してpushするだけ。タグのバージョンがビルド時に `package.json` へ注入される。
 
