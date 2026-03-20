@@ -139,6 +139,8 @@ ipcMain.handle('download-apply-update', async (event) => {
     const zipPathEscaped = zipDest.replace(/'/g, "''")
     const exePathEscaped = exePath.replace(/'/g, "''")
     const destDirEscaped = appDir.replace(/'/g, "''")
+    const tempExtractDir = path.join(tempDir, 'reflectance-update-extract')
+    const tempExtractEscaped = tempExtractDir.replace(/'/g, "''")
     const scriptContent = [
         // アプリプロセスが完全に終了するまで待機（最大30秒）
         `try { Wait-Process -Id ${pid} -Timeout 30 -ErrorAction SilentlyContinue } catch {}`,
@@ -146,20 +148,33 @@ ipcMain.handle('download-apply-update', async (event) => {
         `$zipPath = '${zipPathEscaped}'`,
         `$exePath = '${exePathEscaped}'`,
         `$destDir = '${destDirEscaped}'`,
+        `$tempExtract = '${tempExtractEscaped}'`,
         `$scriptPath = '${scriptPath.replace(/'/g, "''")}'`,
-        // 最大5回リトライしてZIPを展開
+        // 一時展開先をクリーンアップ
+        'if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract }',
+        // 最大5回リトライしてZIPを一時ディレクトリに展開
         '$ok = $false',
         'for ($i = 0; $i -lt 5; $i++) {',
         '  try {',
-        '    Expand-Archive -LiteralPath $zipPath -DestinationPath $destDir -Force -ErrorAction Stop',
+        '    Expand-Archive -LiteralPath $zipPath -DestinationPath $tempExtract -Force -ErrorAction Stop',
         '    $ok = $true',
         '    break',
         '  } catch { Start-Sleep -Seconds 2 }',
         '}',
-        // 展開成功時のみアプリを再起動
-        'if ($ok) { Start-Process -FilePath $exePath }',
+        // ZIPにネストされたフォルダがある場合、その中身を取り出す
+        'if ($ok) {',
+        '  $inner = Get-ChildItem -Path $tempExtract -Directory',
+        '  if ($inner.Count -eq 1 -and (Get-ChildItem -Path $tempExtract -File).Count -eq 0) {',
+        '    $src = $inner[0].FullName',
+        '  } else {',
+        '    $src = $tempExtract',
+        '  }',
+        '  Copy-Item -Path "$src\\*" -Destination $destDir -Recurse -Force',
+        '  Start-Process -FilePath $exePath',
+        '}',
         'Start-Sleep -Seconds 1',
         'Remove-Item $zipPath -Force -ErrorAction SilentlyContinue',
+        'Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue',
         'Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue',
     ].join('\r\n')
 
