@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 環境
+
+- Node.js v22 で開発・検証済み
+- 初回セットアップ: `npm install`
+
 ## コマンド
 
 ```bash
@@ -38,7 +43,7 @@ npx vitest run src/__tests__/App.test.jsx
 
 ### 主要ファイル
 
-- `src/App.jsx` — Reactアプリ全体が単一の大きなコンポーネント（1500行超）。パース処理・状態管理・UI描画がすべてここに集約されている。
+- `src/App.jsx` — Reactアプリ全体が単一の大きなコンポーネント（約1250行）。パース処理・状態管理・UI描画がすべてここに集約されている。
 - `electron/main.cjs` — Electronメインプロセス。`package.json` が `"type": "module"` のため `.cjs` 拡張子でCommonJSを使用。`package.json` からバージョンを読み込んでウィンドウタイトルに反映。開発時は `http://localhost:5173`、本番時は `dist/index.html` を読み込む。IPCハンドラー・自動アップデート・CSP設定を含む。
 - `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `getPlatform` を提供。
 - `vite.config.js` — `base: './'` を設定することで、Electronが `file://` プロトコル経由でビルド成果物を読み込めるようにしている。
@@ -77,40 +82,21 @@ npx vitest run src/__tests__/App.test.jsx
 
 ### Plotly統合
 
-- `react-plotly.js` を使用し、`type: 'scattergl'`（WebGL）で高速描画。
-- クロスヘア追跡は `onHover` イベント + `requestAnimationFrame`。
-- ズーム状態を `xRange`/`yRange` に保持し、Plotlyの `layout` に渡す。
-- `plotRef` でPlotly DOMノードを参照し、プログラムからのズームリセットに使用。
+`react-plotly.js` + `scattergl`（WebGL）で高速描画。ズーム状態は `xRange`/`yRange` ステートで管理。
 
 ### プリセットダイアログ
 
-初回起動時にプリセット選択ダイアログが表示される（`showPresetDialog: true`）：
-
-- `wavelength-reflectance` — 軸を "Wavelength (μm)" / "Reflectance" に設定
-- `xrd` — 軸を "2θ (°)" / "Intensity" に設定
-- `temperature` — 軸を "Time (s)" / "Temperature (°C)" に設定
-- `auto` — ファイル内容から自動判定
+初回起動時にプリセット選択ダイアログが表示される（`showPresetDialog: true`）。`wavelength-reflectance` / `xrd` / `temperature` / `auto` の4種。
 
 ### 自動アップデート
 
-`window.electronAPI`（`preload.cjs` 経由）でGitHub Releasesと通信：
-
-1. 起動時に `check-update` IPCで最新リリースを確認
-2. 新バージョンがあれば通知バッジを表示
-3. ユーザーが「アップデート」を選択すると Windows portable ZIPをダウンロード
-4. PowerShell スクリプトを生成・実行してZIPを展開し、アプリを再起動
-
-Webブラウザ環境（`window.electronAPI` が未定義）では自動アップデートUIは非表示。
+`window.electronAPI`（`preload.cjs` 経由）でGitHub Releasesと通信し、Windows portable ZIPのダウンロード・展開・再起動を行う。Webブラウザ環境では非表示。
 
 ### CI/CD
 
-- **CI**: `.github/workflows/ci.yml` が `main` / `v2.3.0` へのpush・PRでユニットテスト + Viteビルド + Electronビルド（Windows）を実行。
-- **リリースビルド**: `v*` 形式のタグをpushすると `.github/workflows/release.yml` が起動し、Windows portable ZIP・macOS DMG/ZIP・Web distをビルドしてGitHub Releaseにアセットとして添付。タグのバージョンがビルド時に `package.json` へ注入される。
-- **PRビルドチェック**: `.github/workflows/pr-build-check.yml` が `main` へのPR時（`src/`・`electron/`・`package.json`・`vite.config.js` 変更時）に Windows・macOS 両環境で `npm run build` を実行しPRにコメント。
-- **ドラフトリリース**: `.github/workflows/draft-release.yml` がタグpush時に変更履歴を自動収集してドラフトリリースを作成。
-- **成果物検証**: `.github/workflows/verify-artifacts.yml` がリリースビルド完了後にWindows・macOS（x64/arm64）で起動テストを実施。
+`.github/workflows/` に5つのワークフローがある：`ci.yml`（テスト+ビルド）、`release.yml`（リリースビルド）、`pr-build-check.yml`（PRビルド検証）、`draft-release.yml`（ドラフトリリース作成）、`verify-artifacts.yml`（成果物検証）。
 
-リリース手順：`vX.Y.Z` タグを作成してpushするだけ。以降はCIが自動処理する。
+リリース手順：`vX.Y.Z` タグを作成してpushするだけ。タグのバージョンがビルド時に `package.json` へ注入される。
 
 ### テスト
 
