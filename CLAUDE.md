@@ -43,7 +43,7 @@ npx vitest run src/__tests__/App.test.jsx
 
 ### 主要ファイル
 
-- `src/App.jsx` — Reactアプリ全体が単一の大きなコンポーネント（約1250行）。パース処理・状態管理・UI描画がすべてここに集約されている。
+- `src/App.jsx` — Reactアプリ全体が単一の大きなコンポーネント（約1220行）。パース処理・状態管理・UI描画がすべてここに集約されている。
 - `electron/main.cjs` — Electronメインプロセス。`package.json` が `"type": "module"` のため `.cjs` 拡張子でCommonJSを使用。`package.json` からバージョンを読み込んでウィンドウタイトルに反映。開発時は `http://localhost:5173`、本番時は `dist/index.html` を読み込む。IPCハンドラー・自動アップデート・CSP設定を含む。
 - `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `getPlatform` を提供。
 - `vite.config.js` — `base: './'` を設定することで、Electronが `file://` プロトコル経由でビルド成果物を読み込めるようにしている。
@@ -80,6 +80,13 @@ npx vitest run src/__tests__/App.test.jsx
 
 単位変換：プリセットが `wavelength-reflectance` かつユニットダイアログでユーザーが "nm" を選択した場合、x値を1000で除算してμmに変換。
 
+### App.jsx の共通ヘルパー
+
+- `PRESET_LABELS` — プリセット名→軸ラベルのマップ定数。新しいプリセット追加時はここに定義する
+- `addTrace(x, y, file, header)` — `parseAndAddFiles` 内のヘルパー。トレース作成・カラー割り当て・グループ追加を一括処理
+- `classifyAndAddFiles(files)` — ファイル入力/ドロップ共通。wavelength-reflectanceプリセット時にnm/μm単位選択ダイアログを出すかの分岐を担当
+- `parseWhitespaceSeparated(text)` — `.asc` とフォールバックパーサーの共通実装
+
 ### Plotly統合
 
 `react-plotly.js` + `scattergl`（WebGL）で高速描画。ズーム状態は `xRange`/`yRange` ステートで管理。
@@ -92,11 +99,22 @@ npx vitest run src/__tests__/App.test.jsx
 
 `window.electronAPI`（`preload.cjs` 経由）でGitHub Releasesと通信し、Windows portable ZIPのダウンロード・展開・再起動を行う。Webブラウザ環境では非表示。
 
+### main.cjs のモジュールレベル定数
+
+- `currentVersion` — 起動時に `package.json` から1回だけ読み込み。IPC ハンドラや `createWindow` で共有
+- `cachedRelease` — `check-update` で取得したGitHub Release情報をキャッシュし、`download-apply-update` で再利用
+- `RELEASES_URL` / `httpOptions(url)` — GitHub API URL定数とHTTPリクエストオプション共通ヘルパー
+
 ### CI/CD
 
 `.github/workflows/` に4つのワークフローがある：`ci.yml`（テスト+ビルド）、`release.yml`（リリースビルド＋リリースノート自動生成）、`pr-build-check.yml`（PRビルド検証）、`verify-artifacts.yml`（成果物検証）。
 
 リリース手順：`vX.Y.Z` タグを作成してpushするだけ。タグのバージョンがビルド時に `package.json` へ注入される。
+
+### Claude Code スキル
+
+- `/release <version>` — README更新 → タグ作成 → push。mainブランチ上でのみ使用
+- `/parse-test <ext>` — 新しいファイルパーサーのテストをTDDで生成
 
 ### テスト
 
