@@ -18,7 +18,8 @@
       "Bash(do echo:*)",
       "Bash(bash scripts/release-notes.sh v2.3.2)",
       "Bash(npx vitest:*)",
-      "Skill(commit-commands:commit)"
+      "Skill(commit-commands:commit)",
+      "Bash(gh api:*)"
     ]
   }
 }
