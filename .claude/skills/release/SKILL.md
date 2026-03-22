@@ -1,7 +1,6 @@
 ---
 name: release
 description: READMEを更新し、セマンティックバージョンのタグを作成してリリースフローを開始する
-disable-model-invocation: true
 ---
 
 # /release スキル
