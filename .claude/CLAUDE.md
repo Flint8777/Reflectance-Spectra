@@ -99,6 +99,8 @@ npx vitest run src/__tests__/App.test.jsx
 
 `window.electronAPI`（`preload.cjs` 経由）でGitHub Releasesと通信し、Windows portable ZIPのダウンロード・展開・再起動を行う。Webブラウザ環境では非表示。
 
+> **注意**: アップデートスクリプトでは `Wait-Process -Id <pid>` 後に `taskkill /F /IM "*.exe" /T` を実行する。ElectronはGPU・レンダラー等の子プロセスを起動するため、メインPIDの終了待機だけではファイルロックが残り上書きコピーが失敗する。
+
 ### main.cjs のモジュールレベル定数
 
 - `currentVersion` — 起動時に `package.json` から1回だけ読み込み。IPC ハンドラや `createWindow` で共有

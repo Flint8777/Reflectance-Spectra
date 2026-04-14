@@ -141,10 +141,13 @@ ipcMain.handle('download-apply-update', async (event) => {
     const destDirEscaped = appDir.replace(/'/g, "''")
     const tempExtractDir = path.join(tempDir, 'reflectance-update-extract')
     const tempExtractEscaped = tempExtractDir.replace(/'/g, "''")
+    const exeName = path.basename(exePath)
     const scriptContent = [
         // アプリプロセスが完全に終了するまで待機（最大30秒）
         `try { Wait-Process -Id ${pid} -Timeout 30 -ErrorAction SilentlyContinue } catch {}`,
-        'Start-Sleep -Seconds 1',
+        // 子プロセス（GPU・レンダラー等）を強制終了してファイルロックを解放
+        `taskkill /F /IM "${exeName}" /T 2>$null`,
+        'Start-Sleep -Seconds 2',
         `$zipPath = '${zipPathEscaped}'`,
         `$exePath = '${exePathEscaped}'`,
         `$destDir = '${destDirEscaped}'`,
