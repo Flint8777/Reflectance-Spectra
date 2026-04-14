@@ -19,7 +19,16 @@
       "Bash(bash scripts/release-notes.sh v2.3.2)",
       "Bash(npx vitest:*)",
       "Skill(commit-commands:commit)",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "Bash(uv python:*)",
+      "Bash(powershell:*)",
+      "Read(//c/Users/PHOBOS/AppData/Local/Temp/**)",
+      "Skill(commit-commands:commit-push-pr)",
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).version\\)\")"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "context7"
+  ]
 }
