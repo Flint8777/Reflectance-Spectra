@@ -101,6 +101,10 @@ npx vitest run src/__tests__/App.test.jsx
 
 > **注意**: アップデートスクリプトでは `Wait-Process -Id <pid>` 後に `taskkill /F /IM "*.exe" /T` を実行する。ElectronはGPU・レンダラー等の子プロセスを起動するため、メインPIDの終了待機だけではファイルロックが残り上書きコピーが失敗する。
 
+> **インストール場所**: このアプリはportable版のため `C:\Program Files\` への配置は不可（書き込み権限なしでアップデートが失敗する）。正しい配置先は `C:\Users\<user>\AppData\Local\ReflectanceSpectraViewer\`。
+
+> **アップデートスクリプトのデバッグ**: コピー失敗は無音で起きやすい。`Copy-Item -Path "$src\*"` はスペース含むパスで不安定なため `Get-ChildItem -LiteralPath $src | Copy-Item` を使うこと（v2.5.0で修正済み）。
+
 ### main.cjs のモジュールレベル定数
 
 - `currentVersion` — 起動時に `package.json` から1回だけ読み込み。IPC ハンドラや `createWindow` で共有
