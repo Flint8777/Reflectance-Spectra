@@ -246,10 +246,8 @@ function createWindow() {
     // HTMLの<title>タグによるウィンドウタイトル上書きを防止
     win.on('page-title-updated', (e) => e.preventDefault())
 
-    // メニューバーを非表示（本番で余計なメニューを出さない）
-    if (!isDev) {
-        win.setMenuBarVisibility(false)
-    }
+    // メニューバーを完全に撤去（Alt キーによる表示も抑止）
+    win.setMenu(null)
 }
 
 app.whenReady().then(() => {

@@ -60,6 +60,15 @@ npx vitest run src/__tests__/App.test.jsx
 
 `groups[]` でトレースのセットをまとめて表示切替できる。`activeGroupId` が新規ファイルの追加先グループを決定する。
 
+規格化・スタック・UI ステート:
+- `normalizationMode` — `'none' | 'wavelength' | 'max' | 'minmax'` + `normalizationMaxScope` (`'view' | 'all'`)
+- `stackEnabled` / `stackGap` — 各トレースを `scaleToUnit()` で [0,1] にスケール後、`rank * (1 + gap)` オフセット
+- `plotIsZoomed` — `plotly_relayout` を直接購読（react-plotly.js の onRelayout prop は稀に発火しない）
+- `confirmState` — 再利用可能な確認ダイアログ。`onDismiss` を渡すと Cancel 時に代替アクション実行
+- `notice` — NoticeBanner の状態。`{ type, message, id, actionLabel?, actionFn? }`、8 秒自動消去・Undo 対応
+- `seenHeaders` — 選択/却下したヘッダー組を記憶し再問合せ抑制
+- `groupColorCountersRef` — グループ別カラーサイクル counter（useEffect で空グループ分を自動削除）
+
 アップデート関連のステート：
 - `updateStatus` — `'idle'|'checking'|'available'|'downloading'|'no-update'|'error'`
 - `updateInfo` — `{ hasUpdate, currentVersion, latestVersion, releaseUrl }`
@@ -80,12 +89,15 @@ npx vitest run src/__tests__/App.test.jsx
 
 単位変換：プリセットが `wavelength-reflectance` かつユニットダイアログでユーザーが "nm" を選択した場合、x値を1000で除算してμmに変換。
 
+**色の割当は Promise.all 完了後、ファイル名昇順で実施**（`addTrace` 内では色未設定）。CSV ヘッダーに `wavenumber` が含まれる場合、確認ダイアログで `λ = 10000 / ν` 変換を提案。DPT は常に wavelength (μm) なので変換対象外。
+
 ### App.jsx の共通ヘルパー
 
 - `PRESET_LABELS` — プリセット名→軸ラベルのマップ定数。新しいプリセット追加時はここに定義する
 - `addTrace(x, y, file, header)` — `parseAndAddFiles` 内のヘルパー。トレース作成・カラー割り当て・グループ追加を一括処理
 - `classifyAndAddFiles(files)` — ファイル入力/ドロップ共通。wavelength-reflectanceプリセット時にnm/μm単位選択ダイアログを出すかの分岐を担当
 - `parseWhitespaceSeparated(text)` — `.asc` とフォールバックパーサーの共通実装
+- エクスポート済み規格化ヘルパー（テスト対象）: `findYatX` / `normalizeByMax` / `normalizeByMaxInRange` / `scaleToUnit` / `scaleToUnitInRange` / `normalizeAtX`。`src/__tests__/normalization.test.js` 参照
 
 ### Plotly統合
 
@@ -129,3 +141,58 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 - `react-plotly.js`（Canvas/WebGLエラー回避のため、プレーンな `<div>` をレンダリング）
 - `HTMLCanvasElement.getContext`
 - `URL.createObjectURL`
+
+### UX 規約
+
+- UI 表示は英語。コードコメントは日本語（上位 CLAUDE.md の指示に従う）
+- "Unload" は viewer から外すだけ。ローカルファイルは削除しないため `Delete`/`Remove` に言い換えない
+- 破壊的アクション（Unload / Close Group）は `ConfirmDialog` + `danger-btn`（赤）
+- ダイアログボタン順は `Cancel | Apply`（Cancel 左、実行系が右下）
+- 非ブロッキング通知は `NoticeBanner`、ブロッキングは `ConfirmDialog`
+
+### 落とし穴
+
+- ファイル input の同じファイル再選択で `onChange` が発火しない。`onClick={e => e.target.value = ''}` で毎回 reset
+- `electron/main.cjs` の変更は HMR 対象外。反映に `taskkill //F //IM electron.exe` → `npm run dev` 再実行
+- Plotly のズーム状態は `react-plotly.js` の onRelayout だけだと漏れる。`plotRef.current?.el.on('plotly_relayout')` で直接購読
+- Playwright MCP のファイルアップロードは `.playwright-mcp/fixtures/` 配下に置く（プロジェクトルート内必須）
+
+### リリース前テスト項目
+
+**テスト層**:
+- **自動 (CI/ローカル)**: `npm run test:run`（unit + integration、現在 31 件）、`npm run build`
+- **Playwright MCP**: `npm run dev` → `http://localhost:5173` に対し `mcp__playwright__*` で UI 操作 → DOM/Plotly 状態を検証
+- **Electron 実機**: `npm run electron:build:win` で生成したパッケージで最終確認
+
+**Playwright で検証できる項目**（検証パターン例あり）:
+| 項目 | 検証方法 |
+|---|---|
+| 初期フロー | Preset 選択 → file_upload → 単位ダイアログ Apply → `plot.data.length` 確認 |
+| 規格化 (wavelength/max/minmax) | 値比較 + `plot._fullLayout.yaxis.range` / `xaxis.range` 検査 |
+| Reset Zoom 遷移 | `Plotly.relayout(plot, {...})` 後に `button.disabled` が false |
+| スタック | トグル後 `yaxis.showticklabels === false` / slider 変更で data.y が即時更新 |
+| NoticeBanner | 範囲外波長で規格化 → `.notice-warning` の存在、Wavenumber CSV で `.confirm-dialog` 表示 |
+| Undo トースト | Unload → `.notice-action` が出る → クリックで trace 復元 |
+| ヘッダー抑制 | 同一ヘッダー CSV を 2 回読み込み → 2 回目は `HeaderSelectDialog` 出ない |
+| 同一ファイル再 upload | Unload All → 同じファイル再 upload で `plot.data.length > 0` |
+| グループ操作 | 右クリックで context menu、外部クリックで閉じる |
+| 凡例 D&D 並び替え | `DataTransfer` を使った drag event シミュレーション |
+| 座標表示単位 | mouseover 後の DOM テキストが ` μm` を含む |
+
+**Playwright 運用メモ**:
+- ファイルアップロードは `.playwright-mcp/fixtures/` 配下の fixture を使う
+- Plotly 内部状態は `document.querySelector('.js-plotly-plot').data` / `._fullLayout` で読める
+- `Plotly.relayout()` はプログラマティック実行では `onRelayout` prop が発火しないことがあるので、直接購読した state (`plotIsZoomed`) を使うべき
+
+**目視必須（Playwright 困難）**:
+- プロットの視覚的妥当性（線の形・色分布）
+- Plotly のマウスホイールズーム、ドラッグ選択ズームの滑らかさ
+- カラーピッカーダイアログ（OS ネイティブ）
+- インストーラ版 Electron ウィンドウ挙動（メニューバー非表示、タイトル、自動アップデート）
+- 範囲選択ズーム直後の Auto-fit Y / Reset Zoom ボタンの enable 切替視覚フィードバック
+
+**CI が自動担保**:
+- `.github/workflows/ci.yml`: push/PR で test:run + build
+- `.github/workflows/release.yml`: タグ push で electron:build:win/mac
+- `.github/workflows/pr-build-check.yml`: PR のビルド検証
+- `.github/workflows/verify-artifacts.yml`: 成果物検証

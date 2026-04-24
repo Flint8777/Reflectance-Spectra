@@ -24,7 +24,21 @@
       "Bash(powershell:*)",
       "Read(//c/Users/PHOBOS/AppData/Local/Temp/**)",
       "Skill(commit-commands:commit-push-pr)",
-      "Bash(node -e \"console.log\\(require\\('./package.json'\\).version\\)\")"
+      "Bash(node -e \"console.log\\(require\\('./package.json'\\).version\\)\")",
+      "Bash(git fetch *)",
+      "Bash(npm run *)",
+      "Bash(git config *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Read(//tmp/**)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_snapshot",
+      "mcp__playwright__browser_click",
+      "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_evaluate",
+      "mcp__playwright__browser_close",
+      "Bash(taskkill //F //IM electron.exe)",
+      "Bash(taskkill //F //IM node.exe //FI \"WINDOWTITLE eq npm*\")"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -19,7 +19,7 @@ describe('アップデート機能', () => {
     it('window.electronAPI が未定義のときアップデートボタンは表示されない', () => {
         delete window.electronAPI
         render(<App />)
-        expect(screen.queryByTitle('アップデートを確認')).toBeNull()
+        expect(screen.queryByTitle('Check for updates')).toBeNull()
     })
 
     it('window.electronAPI が定義されているときアップデートボタンが同期的に表示される', () => {
@@ -32,10 +32,10 @@ describe('アップデート機能', () => {
             onDownloadProgress: vi.fn().mockReturnValue(() => {}),
         }
         render(<App />)
-        expect(screen.getByTitle('アップデートを確認')).toBeInTheDocument()
+        expect(screen.getByTitle('Check for updates')).toBeInTheDocument()
     })
 
-    it('ボタンクリックでダイアログが開き「アップデート確認」タイトルが表示される', async () => {
+    it('ボタンクリックでダイアログが開きタイトルが表示される', async () => {
         window.electronAPI = {
             getPlatform: vi.fn().mockResolvedValue('win32'),
             checkForUpdate: vi.fn().mockResolvedValue({
@@ -45,9 +45,9 @@ describe('アップデート機能', () => {
             onDownloadProgress: vi.fn().mockReturnValue(() => {}),
         }
         render(<App />)
-        fireEvent.click(screen.getByTitle('アップデートを確認'))
+        fireEvent.click(screen.getByTitle('Check for updates'))
         await waitFor(() => {
-            expect(screen.getByText('アップデート確認')).toBeInTheDocument()
+            expect(screen.getByRole('heading', { name: 'Check for updates' })).toBeInTheDocument()
         })
     })
 
@@ -61,7 +61,7 @@ describe('アップデート機能', () => {
             onDownloadProgress: vi.fn().mockReturnValue(() => {}),
         }
         render(<App />)
-        fireEvent.click(screen.getByTitle('アップデートを確認'))
+        fireEvent.click(screen.getByTitle('Check for updates'))
         await waitFor(() => {
             expect(screen.getByText(/2\.0\.0/)).toBeInTheDocument()
         })
@@ -83,7 +83,7 @@ describe('アップデート機能', () => {
         })
         vi.useRealTimers()
         await waitFor(() => {
-            expect(screen.getByTitle('アップデートあり')).toBeInTheDocument()
+            expect(screen.getByTitle('Update available')).toBeInTheDocument()
         }, { timeout: 3000 })
     })
 })

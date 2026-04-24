@@ -39,3 +39,6 @@ out/
 
 # Shortcuts / miscellaneous
 *.lnk
+
+# Playwright MCP artifacts
+.playwright-mcp/
