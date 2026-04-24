@@ -115,6 +115,10 @@ npx vitest run src/__tests__/App.test.jsx
 
 > **インストール場所**: このアプリはportable版のため `C:\Program Files\` への配置は不可（書き込み権限なしでアップデートが失敗する）。正しい配置先は `C:\Users\<user>\AppData\Local\ReflectanceSpectraViewer\`。
 
+> **userData のパス**: Electron の userData は `%APPDATA%\reflectance-spectra-viewer\`（小文字ハイフン、`package.json` の `name` に由来）。インストール先 `ReflectanceSpectraViewer` と命名が異なるので、完全リセット時は両方を削除する必要がある。
+
+> **自動更新の下限バージョン**: v2.5.0 未満のアプリは updater スクリプト自体にバグがあり（子プロセスロック / スペース入りパスでの無音コピー失敗）、GUI の更新ボタンからは v2.5.0+ へ上げられない。旧版ユーザーには ZIP を手動展開して v2.5.0+ を導入してもらう必要がある。
+
 > **アップデートスクリプトのデバッグ**: コピー失敗は無音で起きやすい。`Copy-Item -Path "$src\*"` はスペース含むパスで不安定なため `Get-ChildItem -LiteralPath $src | Copy-Item` を使うこと（v2.5.0で修正済み）。
 
 ### main.cjs のモジュールレベル定数
