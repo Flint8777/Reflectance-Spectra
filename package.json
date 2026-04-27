@@ -56,8 +56,7 @@
             "target": [
                 "portable"
             ],
-            "icon": "electron/icons/icon.ico",
-            "sign": null
+            "icon": "electron/icons/icon.ico"
         },
         "mac": {
             "target": [
