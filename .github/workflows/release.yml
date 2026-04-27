@@ -58,7 +58,7 @@ jobs:
           path: dist-electron
 
       - name: Attach to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist-electron/Reflectance-Spectra-Viewer-v*_win.zip
@@ -126,7 +126,7 @@ jobs:
           path: dist-electron/renamed
 
       - name: Attach macOS x64 DMG to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_x64.dmg
         env:
@@ -193,7 +193,7 @@ jobs:
           path: dist-electron/renamed
 
       - name: Attach macOS arm64 DMG to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_arm64.dmg
         env:
@@ -236,7 +236,7 @@ jobs:
           path: web-dist-v*.zip
 
       - name: Attach web dist to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: web-dist-v*.zip
         env:
