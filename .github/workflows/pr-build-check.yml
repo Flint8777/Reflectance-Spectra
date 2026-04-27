@@ -33,12 +33,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Ensure Rollup native binary (Windows)
-        shell: bash
-        run: |
-          VER=$(node -p "require('rollup/package.json').version")
-          npm i -D @rollup/rollup-win32-x64-msvc@"${VER}"
-
       - name: Build (verify only)
         run: npm run build
 
@@ -81,11 +75,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Ensure Rollup native binary (macOS arm64)
-        run: |
-          VER=$(node -p "require('rollup/package.json').version")
-          npm i -D @rollup/rollup-darwin-arm64@"${VER}"
 
       - name: Build (verify only)
         run: npm run build

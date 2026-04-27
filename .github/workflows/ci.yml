@@ -26,11 +26,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Ensure Rollup native binary (Linux)
-        run: |
-          VER=$(node -p "require('rollup/package.json').version")
-          npm i -D @rollup/rollup-linux-x64-gnu@"${VER}"
-
       - name: Run unit tests
         run: npm run test:run
 
@@ -58,12 +53,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Ensure Rollup native binary (Windows)
-        shell: bash
-        run: |
-          VER=$(node -p "require('rollup/package.json').version")
-          npm i -D @rollup/rollup-win32-x64-msvc@"${VER}"
 
       - name: Build app (no publish)
         run: npm run electron:build:win -- --publish=never
