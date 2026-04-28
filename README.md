@@ -156,10 +156,11 @@ npm run test:run
 
 ### 使用技術
 
-- Electron 28
+- Electron 41
 - React 18
-- Plotly.js（WebGL）
-- Vite 5
+- Plotly.js v3（WebGL）
+- Vite 8
+- Vitest 4
 - PapaParse（CSV解析）
 
 ### CI/CD
