@@ -18,11 +18,21 @@ const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
 const currentVersion = pkg.version
 const RELEASES_URL = 'https://api.github.com/repos/Flint8777/Reflectance-Spectra/releases/latest'
 const REDIRECT_CODES = [301, 302, 307, 308]
+const MAX_REDIRECTS = 5
+// shell.openExternal で開いてよい URL のホワイトリスト。
+// プレフィクス完全一致（先頭から）で評価する。
+const ALLOWED_EXTERNAL_PREFIXES = [
+    'https://github.com/Flint8777/Reflectance-Spectra'
+]
 
 // ---- ヘルパー関数 ----
 
 function httpOptions(url) {
     const urlObj = new URL(url)
+    // HTTPS 強制。リダイレクト先が http:// にダウングレードされた場合も拒否
+    if (urlObj.protocol !== 'https:') {
+        throw new Error(`https only: got ${urlObj.protocol}`)
+    }
     return {
         hostname: urlObj.hostname,
         path: urlObj.pathname + urlObj.search,
@@ -30,12 +40,13 @@ function httpOptions(url) {
     }
 }
 
-function fetchJson(url) {
+function fetchJson(url, redirectsLeft = MAX_REDIRECTS) {
     return new Promise((resolve, reject) => {
         https.get(httpOptions(url), res => {
             if (REDIRECT_CODES.includes(res.statusCode)) {
                 res.destroy()
-                resolve(fetchJson(res.headers.location))
+                if (redirectsLeft <= 0) { reject(new Error('too many redirects')); return }
+                resolve(fetchJson(res.headers.location, redirectsLeft - 1))
                 return
             }
             let data = ''
@@ -51,11 +62,12 @@ function fetchJson(url) {
 
 function downloadFile(url, dest, onProgress) {
     return new Promise((resolve, reject) => {
-        const doDownload = (downloadUrl) => {
+        const doDownload = (downloadUrl, redirectsLeft) => {
             https.get(httpOptions(downloadUrl), res => {
                 if (REDIRECT_CODES.includes(res.statusCode)) {
                     res.destroy()
-                    doDownload(res.headers.location)
+                    if (redirectsLeft <= 0) { reject(new Error('too many redirects')); return }
+                    doDownload(res.headers.location, redirectsLeft - 1)
                     return
                 }
                 const totalBytes = parseInt(res.headers['content-length'] || '0', 10)
@@ -77,7 +89,7 @@ function downloadFile(url, dest, onProgress) {
                 fileStream.on('error', reject)
             }).on('error', reject)
         }
-        doDownload(url)
+        doDownload(url, MAX_REDIRECTS)
     })
 }
 
@@ -96,7 +108,13 @@ function compareVersions(a, b) {
 
 ipcMain.handle('get-platform', () => process.platform)
 
-ipcMain.handle('open-external', (_event, url) => shell.openExternal(url))
+ipcMain.handle('open-external', (_event, url) => {
+    // ALLOWED_EXTERNAL_PREFIXES に一致しない URL は拒否（file:// や cmd: の混入防御）
+    if (typeof url !== 'string' || !ALLOWED_EXTERNAL_PREFIXES.some(p => url.startsWith(p))) {
+        throw new Error('blocked: url not in allowlist')
+    }
+    return shell.openExternal(url)
+})
 
 let cachedRelease = null
 
@@ -248,6 +266,15 @@ function createWindow() {
 
     // メニューバーを完全に撤去（Alt キーによる表示も抑止）
     win.setMenu(null)
+
+    // 新規ウィンドウ生成は一切拒否（target=_blank 等での乗っ取り防御）
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
+    // 既存ウィンドウのナビゲーション抑止。開発時のみ Vite dev server へのナビゲーションを許可
+    win.webContents.on('will-navigate', (e, url) => {
+        if (isDev && url.startsWith('http://localhost:')) return
+        e.preventDefault()
+    })
 }
 
 app.whenReady().then(() => {
