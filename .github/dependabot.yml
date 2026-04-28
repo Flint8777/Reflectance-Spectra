@@ -7,12 +7,21 @@ updates:
       day: "monday"
       time: "09:30"
       timezone: "Asia/Tokyo"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
     groups:
+      # dev-dependencies は minor/patch のみまとめる。major は個別 PR で出させる
       dev-dependencies:
         dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
+      # react / react-dom は peer dep 制約で同時に上げる必要があるため major も含めて同一 PR にまとめる
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
 
   - package-ecosystem: "github-actions"
     directory: "/"
