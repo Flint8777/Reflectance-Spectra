@@ -36,7 +36,7 @@
         "electron": "^41.3.0",
         "electron-builder": "^26.0.0",
         "concurrently": "^8.2.2",
-        "wait-on": "^7.2.0"
+        "wait-on": "^9.0.5"
     },
     "optionalDependencies": {
         "dmg-license": "^1.0.11"
