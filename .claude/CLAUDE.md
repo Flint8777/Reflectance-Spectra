@@ -135,7 +135,7 @@ npx vitest run src/__tests__/App.test.jsx
 
 ### Claude Code スキル
 
-- `/release <version>` — README更新 → タグ作成 → push。mainブランチ上でのみ使用
+- `/release <version>` — README更新 → タグ作成 → push。mainブランチ上でのみ使用。**注意**: スキルは README を main へ直接コミットする手順だが本リポジトリは main 直接禁止 → `docs/readme-vX.Y.Z` ブランチで PR 作成 → マージしてからタグ push する
 - `/parse-test <ext>` — 新しいファイルパーサーのテストをTDDで生成
 
 ### テスト
@@ -160,6 +160,8 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 - `electron/main.cjs` の変更は HMR 対象外。反映に `taskkill //F //IM electron.exe` → `npm run dev` 再実行
 - Plotly のズーム状態は `react-plotly.js` の onRelayout だけだと漏れる。`plotRef.current?.el.on('plotly_relayout')` で直接購読
 - Playwright MCP のファイルアップロードは `.playwright-mcp/fixtures/` 配下に置く（プロジェクトルート内必須）
+- Vite v8 (Rolldown) は CJS の `__esModule: true` を unwrap せず `import X from 'cjs-pkg'` が `{ default: fn, __esModule: true }` を返すことがある → `X?.default ?? X` で吸収（App.jsx の Plot / Plotly import が該当）。症状は React の "Element type is invalid: ... got: object"
+- 大型依存更新（plotly / vite / electron のメジャー bump）後に optimizer 由来の interop 不具合が出たら `rm -rf node_modules/.vite` でキャッシュをクリアしてから `npm run dev`
 
 ### リリース前テスト項目
 
