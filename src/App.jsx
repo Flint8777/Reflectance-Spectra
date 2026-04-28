@@ -20,8 +20,16 @@ function isRelabTabFile(text) {
 
 
 import React, { useCallback, useMemo, useRef, useState } from 'react'
-import Plot from 'react-plotly.js'
+import createPlotlyComponentDefault from 'react-plotly.js/factory'
+import PlotlyDefault from 'plotly.js-dist-min'
 import Papa from 'papaparse'
+
+// Vite v8 (Rolldown) が CJS の `__esModule: true` を unwrap せず default 経由で
+// `{ default: fn }` を返すため、`.default` フォールバックで実体を取り出す。
+// react-plotly.js を factory pattern で使い、軽量な dist-min を Plotly として渡す。
+const createPlotlyComponent = createPlotlyComponentDefault?.default ?? createPlotlyComponentDefault
+const Plotly = PlotlyDefault?.default ?? PlotlyDefault
+const Plot = createPlotlyComponent(Plotly)
 
 const palette = [
     '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
