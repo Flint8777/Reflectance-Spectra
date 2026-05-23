@@ -23,6 +23,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react'
 import createPlotlyComponentDefault from 'react-plotly.js/factory'
 import PlotlyDefault from 'plotly.js-dist-min'
 import Papa from 'papaparse'
+import { isOpusMagic, parseOpusBuffer } from './opusParser.js'
 
 // Vite v8 (Rolldown) が CJS の `__esModule: true` を unwrap せず default 経由で
 // `{ default: fn }` を返すため、`.default` フォールバックで実体を取り出す。
@@ -659,6 +660,8 @@ export default function App() {
     const [plotIsZoomed, setPlotIsZoomed] = useState(false)
     const [legendSortKey, setLegendSortKey] = useState('filename') // 'filename' | 'ext' | 'custom'
     const [legendSortOrder, setLegendSortOrder] = useState('asc') // 'asc' | 'desc'
+    // 同一ファイル内の複数スペクトル群を凡例で展開するかどうか (ファイル名キー集合)
+    const [expandedFiles, setExpandedFiles] = useState(() => new Set())
     const [dragOverLegend, setDragOverLegend] = useState(null) // { idx, position: 'before'|'after' } | null
 
     // 規格化関連: 'none' | 'wavelength' | 'max'
@@ -699,6 +702,7 @@ export default function App() {
         const newInfos = []
         const newGroupIds = []
         const detectedHeaders = []
+        const newVisibility = [] // 既定 true。OPUS Series で raw を隠す等の用途で個別指定
 
         // パース完了は非同期順なのでここでは色を割り当てず、後でファイル名昇順に確定する
         const addTrace = (x, y, file, header) => {
@@ -706,11 +710,86 @@ export default function App() {
             newInfos.push(file.name)
             newGroupIds.push(activeGroupId)
             detectedHeaders.push(header)
+            newVisibility.push(true)
         }
 
         const tasks = files.map(file => new Promise(resolve => {
             const lname = file.name.toLowerCase()
             const ext = lname.split('.').pop()
+
+            // OPUS バイナリ (.0 / .0001 / .opus 等) は ArrayBuffer 経路で処理
+            if (/^\d+$/.test(ext) || ext === 'opus') {
+                const binReader = new FileReader()
+                binReader.onload = () => {
+                    const ab = binReader.result
+                    if (!isOpusMagic(ab)) { resolve(); return }
+                    const result = parseOpusBuffer(ab)
+                    if (!result || !result.spectra.length) { resolve(); return }
+                    let spectra = result.spectra
+                    if (presetSelected === 'wavelength-reflectance') {
+                        // 波長軸のスペクトルだけに絞る（PNT/LGW 等の Trace 軸は除外）
+                        spectra = spectra.filter(sp => sp.dxu === 'WN' || sp.dxu === 'MI')
+                        // OPUS は同一物理スペクトルを WN/MI 両方で保存することがあるので MI を優先
+                        // Series の場合は seriesIndex ごとに別物として dedup する
+                        const byKey = new Map()
+                        for (const sp of spectra) {
+                            const idxPart = sp.seriesIndex !== undefined ? `#${sp.seriesIndex}` : ''
+                            const k = sp.key + idxPart
+                            if (!byKey.has(k)) byKey.set(k, [])
+                            byKey.get(k).push(sp)
+                        }
+                        const filtered = []
+                        for (const list of byKey.values()) {
+                            const miOnes = list.filter(s => s.dxu === 'MI')
+                            if (miOnes.length && list.some(s => s.dxu === 'WN')) filtered.push(...miOnes)
+                            else filtered.push(...list)
+                        }
+                        spectra = filtered
+                    }
+                    // Series ファイルかつ較正済 (ratioed) が存在する場合、raw な単一チャンネル
+                    // (Sample 'sm' / Reference 'rf') をデフォルト非表示にする
+                    const isRawChannel = (sp) => sp.key.endsWith('sm') || sp.key.endsWith('rf')
+                    const hasSeries = spectra.some(sp => sp.seriesIndex !== undefined)
+                    const hasCalibrated = spectra.some(sp => !isRawChannel(sp))
+                    const hideRawByDefault = hasSeries && hasCalibrated
+                    for (const sp of spectra) {
+                        let x = sp.x
+                        // OPUS の DXU=WN（cm⁻¹）→ wavelength-reflectance プリセット時のみ μm に変換
+                        if (presetSelected === 'wavelength-reflectance' && sp.dxu === 'WN') {
+                            x = x.map(v => (Number.isFinite(v) && v !== 0) ? 10000 / v : NaN)
+                        }
+                        // 表示名: Series なら #N インデックス、複数スペクトルならラベル付き
+                        // 手動マイクロ FT-IR では位置情報が記録されないため、時刻ではなく順序番号を採用
+                        const labelWithIdx = sp.seriesIndex !== undefined
+                            ? `${sp.label} #${sp.seriesIndex + 1}`
+                            : sp.label
+                        const displayName = spectra.length > 1
+                            ? `${file.name} [${labelWithIdx}]`
+                            : file.name
+                        newTraces.push({
+                            x,
+                            y: Array.from(sp.y),
+                            type: 'scattergl',
+                            mode: 'lines',
+                            line: { width: 1.5 },
+                            name: displayName,
+                        })
+                        newInfos.push(file.name)
+                        newGroupIds.push(activeGroupId)
+                        detectedHeaders.push(PRESET_LABELS['wavelength-reflectance'])
+                        newVisibility.push(!(hideRawByDefault && isRawChannel(sp)))
+                    }
+                    if (!lockedLabels) {
+                        setXLabel(PRESET_LABELS['wavelength-reflectance'].x)
+                        setYLabel(PRESET_LABELS['wavelength-reflectance'].y)
+                    }
+                    resolve()
+                }
+                binReader.onerror = () => resolve()
+                binReader.readAsArrayBuffer(file)
+                return
+            }
+
             const reader = new FileReader()
             reader.onload = () => {
                 const text = String(reader.result)
@@ -866,6 +945,7 @@ export default function App() {
             const sortedInfos = indices.map(i => newInfos[i])
             const sortedGroupIds = indices.map(i => newGroupIds[i])
             const sortedHeaders = indices.map(i => detectedHeaders[i])
+            const sortedVisibility = indices.map(i => newVisibility[i] !== false)
 
             // wavenumber ヘッダーを含むトレースの位置 (sorted 配列内)
             const wnIndices = []
@@ -885,7 +965,7 @@ export default function App() {
 
                 setTraces(prev => [...prev, ...finalTraces])
                 setFilesInfo(prev => [...prev, ...sortedInfos])
-                setVisibility(prev => [...prev, ...finalTraces.map(() => true)])
+                setVisibility(prev => [...prev, ...sortedVisibility])
                 setTraceGroupIds(prev => [...prev, ...sortedGroupIds])
 
                 // ヘッダー処理: 変換した場合は wavenumber → Wavelength (μm) 相当に置換
@@ -952,7 +1032,8 @@ export default function App() {
         const immediate = []; const needsUnit = []
         for (const f of files) {
             const ext = f.name.toLowerCase().split('.').pop()
-            if (ext === 'tab' || ext === 'dpt' || ext === 'xml') immediate.push(f)
+            // OPUS バイナリは DXU で単位が一意に決まるので nm/μm 確認をスキップ
+            if (ext === 'tab' || ext === 'dpt' || ext === 'xml' || /^\d+$/.test(ext) || ext === 'opus') immediate.push(f)
             else needsUnit.push(f)
         }
         if (needsUnit.length) {
@@ -970,6 +1051,62 @@ export default function App() {
     }, [classifyAndAddFiles])
 
     const toggleVisibility = useCallback((idx) => { setVisibility(prev => { const next = [...prev]; next[idx] = !next[idx]; return next }) }, [])
+
+    // 指定インデックス群の可視性を一括設定
+    const setVisibilityForIndices = useCallback((indices, visible) => {
+        setVisibility(prev => {
+            const next = [...prev]
+            for (const i of indices) next[i] = visible
+            return next
+        })
+    }, [])
+
+    // 指定インデックス群を一括 unload（Undo 付き）。グループヘッダの × ボタン用
+    const unloadIndices = useCallback((indices, displayLabel) => {
+        if (!indices.length) return
+        const sorted = [...indices].sort((a, b) => a - b)
+        const members = sorted.map(idx => ({
+            trace: traces[idx],
+            info: filesInfo[idx],
+            visible: visibility[idx],
+            groupId: traceGroupIds[idx],
+            idx,
+        }))
+        const colorCounters = { ...groupColorCountersRef.current }
+        const toRemove = new Set(sorted)
+        setTraces(prev => prev.filter((_, i) => !toRemove.has(i)))
+        setFilesInfo(prev => prev.filter((_, i) => !toRemove.has(i)))
+        setVisibility(prev => prev.filter((_, i) => !toRemove.has(i)))
+        setTraceGroupIds(prev => prev.filter((_, i) => !toRemove.has(i)))
+        const insertAll = (arr, getValue) => {
+            const next = [...arr]
+            for (const m of members) next.splice(Math.min(m.idx, next.length), 0, getValue(m))
+            return next
+        }
+        setNotice({
+            type: 'info',
+            message: `Unloaded "${displayLabel}" (${members.length} traces)`,
+            actionLabel: 'Undo',
+            actionFn: () => {
+                setTraces(prev => insertAll(prev, m => m.trace))
+                setFilesInfo(prev => insertAll(prev, m => m.info))
+                setVisibility(prev => insertAll(prev, m => m.visible))
+                setTraceGroupIds(prev => insertAll(prev, m => m.groupId))
+                groupColorCountersRef.current = colorCounters
+                setNotice(null)
+            },
+            id: Date.now(),
+        })
+    }, [traces, filesInfo, visibility, traceGroupIds])
+
+    const toggleFileExpanded = useCallback((fname) => {
+        setExpandedFiles(prev => {
+            const next = new Set(prev)
+            if (next.has(fname)) next.delete(fname)
+            else next.add(fname)
+            return next
+        })
+    }, [])
     const clearAll = useCallback(() => {
         if (!traces.length) return
         setConfirmState({
@@ -1628,95 +1765,123 @@ export default function App() {
                                 return 0
                             }
                             if (legendSortKey !== 'custom') items.sort(compare)
-                            return items.map(({ trace, idx }) => {
+                            // ファイル名で隣接同名を集約してグループ化（>1 の時のみ親行を立てる）
+                            const groups = []
+                            const fnameToGroupIdx = new Map()
+                            for (const it of items) {
+                                const fname = filesInfo[it.idx] || ''
+                                let gi = fnameToGroupIdx.get(fname)
+                                if (gi === undefined) {
+                                    gi = groups.length
+                                    fnameToGroupIdx.set(fname, gi)
+                                    groups.push({ fname, members: [] })
+                                }
+                                groups[gi].members.push(it)
+                            }
+                            // 単発 item のレンダラ（既存挙動を維持）
+                            const renderItem = ({ trace, idx }, indented = false) => {
                                 const isDragOver = dragOverLegend && dragOverLegend.idx === idx
                                 const classes = ['legend-item']
+                                if (indented) classes.push('indented')
                                 if (isDragOver && dragOverLegend.position === 'before') classes.push('drag-over-before')
                                 if (isDragOver && dragOverLegend.position === 'after') classes.push('drag-over-after')
                                 return (
-                                <div
-                                    key={idx}
-                                    className={classes.join(' ')}
-                                    title={'Drag to a group to move (Ctrl+drag to copy) · Drag to another item to reorder'}
-                                    draggable
-                                    onDragStart={e => {
-                                        e.dataTransfer.setData('text/plain', String(idx))
-                                    }}
-                                    onDragOver={e => {
-                                        e.preventDefault()
-                                        const rect = e.currentTarget.getBoundingClientRect()
-                                        const position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after'
-                                        setDragOverLegend(prev => (prev && prev.idx === idx && prev.position === position) ? prev : { idx, position })
-                                    }}
-                                    onDragLeave={() => {
-                                        setDragOverLegend(prev => (prev && prev.idx === idx) ? null : prev)
-                                    }}
-                                    onDragEnd={() => setDragOverLegend(null)}
-                                    onDrop={e => {
-                                        e.preventDefault()
-                                        e.stopPropagation()
-                                        const traceIndexStr = e.dataTransfer.getData('text/plain')
-                                        const fromIdx = Number(traceIndexStr)
-                                        setDragOverLegend(null)
-                                        if (!Number.isFinite(fromIdx) || fromIdx === idx) return
-                                        const rect = e.currentTarget.getBoundingClientRect()
-                                        const position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after'
-                                        reorderLegendItem(fromIdx, idx, position)
-                                    }}
-                                >
-                                    <input type='checkbox' checked={visibility[idx] !== false} onChange={() => toggleVisibility(idx)} />
-                                    {/* Unload ボタン: スナップショット保存 + Undo 付き */}
-                                    <button
-                                        className='unload-btn'
-                                        title='Unload'
-                                        onClick={() => {
-                                            const snapshot = {
-                                                trace: traces[idx],
-                                                info: filesInfo[idx],
-                                                visible: visibility[idx],
-                                                groupId: traceGroupIds[idx],
-                                                idx,
-                                                colorCounters: { ...groupColorCountersRef.current },
-                                            }
-                                            setTraces(prev => prev.filter((_, i) => i !== idx))
-                                            setFilesInfo(prev => prev.filter((_, i) => i !== idx))
-                                            setVisibility(prev => prev.filter((_, i) => i !== idx))
-                                            setTraceGroupIds(prev => prev.filter((_, i) => i !== idx))
-                                            const id = Date.now()
-                                            setNotice({
-                                                type: 'info',
-                                                message: `Unloaded "${snapshot.info}"`,
-                                                actionLabel: 'Undo',
-                                                actionFn: () => {
-                                                    const insertAt = (arr, val) => {
-                                                        const n = [...arr]
-                                                        n.splice(Math.min(snapshot.idx, n.length), 0, val)
-                                                        return n
-                                                    }
-                                                    setTraces(prev => insertAt(prev, snapshot.trace))
-                                                    setFilesInfo(prev => insertAt(prev, snapshot.info))
-                                                    setVisibility(prev => insertAt(prev, snapshot.visible))
-                                                    setTraceGroupIds(prev => insertAt(prev, snapshot.groupId))
-                                                    groupColorCountersRef.current = { ...snapshot.colorCounters }
-                                                    setNotice(null)
-                                                },
-                                                id,
-                                            })
+                                    <div
+                                        key={idx}
+                                        className={classes.join(' ')}
+                                        title={'Drag to a group to move (Ctrl+drag to copy) · Drag to another item to reorder'}
+                                        draggable
+                                        onDragStart={e => { e.dataTransfer.setData('text/plain', String(idx)) }}
+                                        onDragOver={e => {
+                                            e.preventDefault()
+                                            const rect = e.currentTarget.getBoundingClientRect()
+                                            const position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after'
+                                            setDragOverLegend(prev => (prev && prev.idx === idx && prev.position === position) ? prev : { idx, position })
+                                        }}
+                                        onDragLeave={() => { setDragOverLegend(prev => (prev && prev.idx === idx) ? null : prev) }}
+                                        onDragEnd={() => setDragOverLegend(null)}
+                                        onDrop={e => {
+                                            e.preventDefault(); e.stopPropagation()
+                                            const fromIdx = Number(e.dataTransfer.getData('text/plain'))
+                                            setDragOverLegend(null)
+                                            if (!Number.isFinite(fromIdx) || fromIdx === idx) return
+                                            const rect = e.currentTarget.getBoundingClientRect()
+                                            const position = (e.clientY - rect.top) < rect.height / 2 ? 'before' : 'after'
+                                            reorderLegendItem(fromIdx, idx, position)
                                         }}
                                     >
-                                        <UnloadIcon />
-                                    </button>
-                                    <div
-                                        className='color-box'
-                                        style={{ backgroundColor: trace.line.color }}
-                                        onClick={() => handleColorClick(idx)}
-                                        onDoubleClick={() => handleColorDoubleClick(idx)}
-                                        title='Click: next color · Double-click: custom color'
-                                    />
-                                    <div className='filename'>{filesInfo[idx]}</div>
-                                </div>
+                                        <input type='checkbox' checked={visibility[idx] !== false} onChange={() => toggleVisibility(idx)} />
+                                        <button
+                                            className='unload-btn'
+                                            title='Unload'
+                                            onClick={() => unloadIndices([idx], traces[idx]?.name || filesInfo[idx])}
+                                        >
+                                            <UnloadIcon />
+                                        </button>
+                                        <div
+                                            className='color-box'
+                                            style={{ backgroundColor: trace.line.color }}
+                                            onClick={() => handleColorClick(idx)}
+                                            onDoubleClick={() => handleColorDoubleClick(idx)}
+                                            title='Click: next color · Double-click: custom color'
+                                        />
+                                        <div className='filename'>{trace.name || filesInfo[idx]}</div>
+                                    </div>
                                 )
-                            })
+                            }
+                            // ファイル単位のグループヘッダ
+                            const renderGroupHeader = (group, expanded) => {
+                                const memberIndices = group.members.map(m => m.idx)
+                                const visCount = memberIndices.filter(i => visibility[i] !== false).length
+                                const allVisible = visCount === memberIndices.length
+                                const noneVisible = visCount === 0
+                                const indeterminate = !allVisible && !noneVisible
+                                return (
+                                    <div
+                                        key={`group-${group.fname}`}
+                                        className='legend-item legend-group-header'
+                                        onClick={e => {
+                                            // フォーム要素のクリックでは展開トグルしない
+                                            const tag = e.target.tagName
+                                            if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'svg' || tag === 'path') return
+                                            toggleFileExpanded(group.fname)
+                                        }}
+                                        title={expanded ? 'Click to collapse' : 'Click to expand'}
+                                    >
+                                        <span className='disclosure-icon'>{expanded ? '▼' : '▶'}</span>
+                                        <input
+                                            type='checkbox'
+                                            checked={allVisible}
+                                            ref={el => { if (el) el.indeterminate = indeterminate }}
+                                            onChange={() => setVisibilityForIndices(memberIndices, !allVisible)}
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                        <button
+                                            className='unload-btn'
+                                            title={`Unload all ${memberIndices.length} traces in this file`}
+                                            onClick={e => { e.stopPropagation(); unloadIndices(memberIndices, group.fname) }}
+                                        >
+                                            <UnloadIcon />
+                                        </button>
+                                        <div className='filename'>
+                                            {group.fname}
+                                            <span className='count-badge'> ({memberIndices.length})</span>
+                                        </div>
+                                    </div>
+                                )
+                            }
+                            // レンダ: グループ size===1 は flat、>1 は親行 +（展開時）子行
+                            const rows = []
+                            for (const g of groups) {
+                                if (g.members.length === 1) {
+                                    rows.push(renderItem(g.members[0], false))
+                                } else {
+                                    const expanded = expandedFiles.has(g.fname)
+                                    rows.push(renderGroupHeader(g, expanded))
+                                    if (expanded) for (const m of g.members) rows.push(renderItem(m, true))
+                                }
+                            }
+                            return rows
                         })()}
                     </div>
                 </div>
@@ -2072,10 +2237,10 @@ function InitialPresetDialog({ onSelect }) {
             <div className='dialog-box'>
                 <h3>Data Type</h3>
                 <div className='datatype-icon-buttons'>
-                    <button className='datatype-icon-btn' onClick={() => onSelect('wavelength-reflectance')} title='DPT (OPUS), TAB (RELAB), CSV, TXT'>
+                    <button className='datatype-icon-btn' onClick={() => onSelect('wavelength-reflectance')} title='OPUS binary, DPT (OPUS), TAB (RELAB), CSV, TXT'>
                         <ReflectanceSpectrumIcon />
                         <span>Reflectance Spectra</span>
-                        <span className='datatype-subtitle'>.dpt .tab .csv .txt</span>
+                        <span className='datatype-subtitle'>.0 .opus .dpt .tab .csv .txt</span>
                     </button>
                     <button className='datatype-icon-btn' onClick={() => onSelect('spacing-intensity')} title='CSV, ASC'>
                         <XRDIcon />

@@ -85,9 +85,10 @@ npx vitest run src/__tests__/App.test.jsx
 | `.xml` | RELABメタデータを `relabMeta` ステートに格納し、後続の `.tab` 読み込みに利用 |
 | `.asc` | XRD ASCII — 空白区切り2列（2θ, Intensity） |
 | `.txt` | 温度測定データ — 2行目の内容で自動判定。時間を0秒始まりに自動変換 |
+| `.0` / `.0001` / `.opus` | Bruker OPUS バイナリ — `src/opusParser.js`（brukeropus を JS 移植）。マジックバイト `\n\n\xfe\xfe` で検証し、1 ファイル内の各スペクトル（AB/TR/R/SM/RF 等）を個別トレースとして展開。x 軸単位は DXU から判定し、WN→μm 自動変換 |
 | その他 | 空白/タブ区切り2列のフォールバック |
 
-単位変換：プリセットが `wavelength-reflectance` かつユニットダイアログでユーザーが "nm" を選択した場合、x値を1000で除算してμmに変換。
+単位変換：プリセットが `wavelength-reflectance` かつユニットダイアログでユーザーが "nm" を選択した場合、x値を1000で除算してμmに変換。OPUS は DXU 値（WN/MI/LGW）で単位が一意に決まるためダイアログをスキップ。
 
 **色の割当は Promise.all 完了後、ファイル名昇順で実施**（`addTrace` 内では色未設定）。CSV ヘッダーに `wavenumber` が含まれる場合、確認ダイアログで `λ = 10000 / ν` 変換を提案。DPT は常に wavelength (μm) なので変換対象外。
 
@@ -98,6 +99,17 @@ npx vitest run src/__tests__/App.test.jsx
 - `classifyAndAddFiles(files)` — ファイル入力/ドロップ共通。wavelength-reflectanceプリセット時にnm/μm単位選択ダイアログを出すかの分岐を担当
 - `parseWhitespaceSeparated(text)` — `.asc` とフォールバックパーサーの共通実装
 - エクスポート済み規格化ヘルパー（テスト対象）: `findYatX` / `normalizeByMax` / `normalizeByMaxInRange` / `scaleToUnit` / `scaleToUnitInRange` / `normalizeAtX`。`src/__tests__/normalization.test.js` 参照
+
+### OPUS バイナリパーサ (`src/opusParser.js`)
+
+brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuffer(ab)` で `{spectra: [{key, label, x, y, dxu, seriesIndex?, srt?, timeRelative?, ...}]}` を返す。
+
+- **WN/MI 二重保存**: OPUS は同一スペクトルを波数 (cm⁻¹) と波長 (μm) で別ブロックに格納する仕様あり。同一 type のデータが複数候補にマッチするため、`pairDataAndStatus` で `npt == data_count` の組を Phase 1 で確定、残りを Phase 2 で greedy 解決。App.jsx は wavelength-reflectance プリセット時に MI を優先 dedup
+- **Series (3D) ブロック** (`type[5]==2`): 1 ブロック内に N 個のスペクトル + STRUCT_3D_INFO (`srt`/`ert` 時刻あり、**位置情報なし**)。各 sub-spectrum を別 trace として展開 (`seriesIndex` 付与)、ラベルは `[label #N]` 表記（手動 Hyperion 測定では位置が記録されないため時刻ではなく順序番号採用）
+- **Compact ブロック** (`type[5]==4`): メタデータ先頭 + 末尾 npt 個が実データ。`raw.length - npt` を offset として読む
+- **較正済 vs 未較正**: ratioed (key='r','a','t' 等) は較正済、`key.endsWith('sm'|'rf')` は raw 単一チャンネル。Series ファイルでは raw をデフォルト非表示 (`newVisibility=false`)
+- **拡張子検出**: OPUS は数字拡張子 (`.0`, `.0001`) または `.opus`。`/^\d+$/.test(ext)` で分岐、マジックバイト `\n\n\xfe\xfe` で再検証
+- **DPT 検証**: 純正 OPUS の DPT エクスポートと点単位比較で max |Δy| ~5×10⁻¹¹ (Float32 精度) を達成すれば移植正しい
 
 ### Plotly統合
 
@@ -146,6 +158,8 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 - `HTMLCanvasElement.getContext`
 - `URL.createObjectURL`
 
+**バイナリパーサのテスト** (`opusParser.test.js`): 実 OPUS ファイル fixture は使わず、`buildOpusFile([{type, bytes}])` ヘルパーで `DataView` 経由の合成バイト列を構築する。`buildParamBlock` / `buildDataBlock` / `buildSeriesBlock` で各種ブロックを最小構成で生成し、エッジケース（WN/MI 重複、Compact、Series）を網羅。実機検証は `scripts/verify-opus.mjs` / `compare-dpt.mjs` で別途行う（コミット対象外の調査用スクリプト）
+
 ### UX 規約
 
 - UI 表示は英語。コードコメントは日本語（上位 CLAUDE.md の指示に従う）
@@ -153,6 +167,8 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 - 破壊的アクション（Unload / Close Group）は `ConfirmDialog` + `danger-btn`（赤）
 - ダイアログボタン順は `Cancel | Apply`（Cancel 左、実行系が右下）
 - 非ブロッキング通知は `NoticeBanner`、ブロッキングは `ConfirmDialog`
+- 凡例パネルの行ラベルは `trace.name`（OPUS 複数 spectrum は `[Reflectance #1]` 等のサフィックス付き）を表示。`filesInfo` は failedNames 検出・ファイル単位グルーピング用
+- 同一ファイル名の trace が複数あるとき凡例は階層表示（親 = file 名 + 件数バッジ + ▶/▼、子はインデント）。`expandedFiles: Set<string>` で展開状態管理、親チェックボックスは indeterminate 対応、親 × は `unloadIndices` で一括 unload
 
 ### 落とし穴
 
