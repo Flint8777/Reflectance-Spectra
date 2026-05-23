@@ -276,6 +276,36 @@ body,
     word-break: break-all;
 }
 
+/* ファイル単位グループヘッダ（複数 spectrum を持つ OPUS 等） */
+.legend-item.legend-group-header {
+    background: #eef3f9;
+    cursor: pointer;
+    user-select: none;
+}
+
+.legend-item.legend-group-header:hover {
+    background: #e0e8f2;
+}
+
+.legend-item.legend-group-header .disclosure-icon {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #666;
+    width: 12px;
+    text-align: center;
+}
+
+.legend-item.legend-group-header .count-badge {
+    color: #888;
+    font-size: 11px;
+    margin-left: 4px;
+}
+
+/* グループ展開時の子 item を視覚的にインデント */
+.legend-item.indented {
+    margin-left: 20px;
+}
+
 .viewer {
     flex: 1;
     position: relative;
