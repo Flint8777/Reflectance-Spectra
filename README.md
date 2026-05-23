@@ -5,7 +5,8 @@
 ## 特徴
 
 - WebGLによる高速描画（Plotly.js）
-- CSV / DPT / RELAB TAB / ASC / TXT 形式に対応
+- CSV / DPT / RELAB TAB / ASC / TXT / **Bruker OPUS バイナリ** 形式に対応
+- OPUS の 3D Series（時系列・多点測定）を自動展開、複数 spectrum を含むファイルは凡例で階層表示
 - 複数ファイル同時表示・グループ管理（カラーサイクルはグループ別）
 - ドラッグ＆ドロップでファイル読み込み・凡例間の並び替え
 - スペクトル規格化（最大値 / Min-Max / 指定波長、表示範囲 or 全範囲基準）
@@ -13,7 +14,7 @@
 - Y オートフィット、片側指定可能な表示範囲入力
 - 単位付き座標読出し、カラーサイクル / カラーピッカー切替
 - Wavenumber ヘッダー検出時に Wavelength への変換を提案
-- Undo 可能な Unload（個別トレース）
+- Undo 可能な Unload（個別トレース・ファイル単位 一括）
 - Windows / macOS 対応
 
 ## ダウンロード
