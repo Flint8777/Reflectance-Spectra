@@ -149,6 +149,8 @@ brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuff
 - OSV-Scanner は dev/推移依存の脆弱性でも `exit 1` で CI を落とす。`package.json` の range 内なら `npm update <pkg>` で lockfile のみ更新して解消できる（例: axios←wait-on, tmp←tmp-promise）
 - このリポジトリは GitHub auto-merge 無効。Dependabot PR は CI green 確認後 `gh pr merge <n> --squash --delete-branch` で手動マージ。lockfile を触る PR は1件マージ毎に残りが CONFLICTING になるので `@dependabot rebase` コメントで順次リベースして解決する
 - Dependabot alerts + security updates は有効。CVE 公開時に修正PRが自動生成され、main 側を先に直すと重複 PR は自動クローズされる
+- **Windows で `npm update` すると lockfile が LF→CRLF に全行書き換わり**、9000行超の churn diff になる（committed 版は LF）。コミット前に `sed -i 's/\r$//' package-lock.json` で LF に戻すとバージョン更新分のみのクリーン差分になる。`.gitattributes` 未設定が根因（Git Bash の `git cat-file -p HEAD:package-lock.json | grep -c $'\r'` で blob は 0 CRLF と確認できる）
+- OSV の PR スキャンは scheduled より新しい advisory を拾う（live OSV データ）。scheduled が落ちて直しても、PR 作成時に新規脆弱性（例: undici）が追加検出されることがあるので PR の `scan` チェックまで確認する
 
 ### Claude Code スキル
 
