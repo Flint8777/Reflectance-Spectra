@@ -41,6 +41,9 @@
     "optionalDependencies": {
         "dmg-license": "^1.0.11"
     },
+    "allowScripts": {
+        "electron": true
+    },
     "build": {
         "appId": "com.reflectance.spectra.viewer",
         "productName": "Reflectance Spectra Viewer",
