@@ -23,7 +23,7 @@
         "plotly.js-dist-min": "^3.6.0",
         "react": "^19.2.7",
         "react-dom": "^19.2.7",
-        "react-plotly.js": "^2.6.0",
+        "react-plotly.js": "^4.0.0",
         "papaparse": "^5.4.1"
     },
     "devDependencies": {
