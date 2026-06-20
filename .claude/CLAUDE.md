@@ -152,6 +152,12 @@ brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuff
 - **Windows で `npm update` すると lockfile が LF→CRLF に全行書き換わり**、9000行超の churn diff になる（committed 版は LF）。コミット前に `sed -i 's/\r$//' package-lock.json` で LF に戻すとバージョン更新分のみのクリーン差分になる。`.gitattributes` 未設定が根因（Git Bash の `git cat-file -p HEAD:package-lock.json | grep -c $'\r'` で blob は 0 CRLF と確認できる）
 - OSV の PR スキャンは scheduled より新しい advisory を拾う（live OSV データ）。scheduled が落ちて直しても、PR 作成時に新規脆弱性（例: undici）が追加検出されることがあるので PR の `scan` チェックまで確認する
 
+**npm v12 (2026年7月予定) の install スクリプト既定 off 対応**:
+- v12 で `npm install` が `preinstall`/`install`/`postinstall` を既定で実行しなくなる。本プロジェクトで install スクリプトを持つのは `electron`(postinstall でバイナリDL=**必須**)・`electron-winstaller`(win target は portable のみで Squirrel 未使用=不要)・`es5-ext`(感謝メッセージのみ=不要)・`fsevents`(mac 限定 optional native=不要)。git/remote 依存はゼロなので `--allow-git`/`--allow-remote` 変更は無影響
+- 対策として `package.json` に `"allowScripts": { "electron": true }` を追加済み。name-only(`true`) にしているのは Dependabot の electron bump 毎にバージョン pin の再承認で CI ビルドが無音で壊れるのを避けるため。npm 10.x は未知フィールドとして無視するので現状の install は無変更
+- npm 11.16.0+ では `npm approve-scripts --allow-scripts-pending` で未承認スクリプトを一覧でき、`allowScripts` を自動生成できる（現環境は npm 10.9.4 のため手書き）。CI は node 20(npm 10) のため当面は警告すら出ない。node/npm を 11.16+ に上げる際に再確認する
+- 依存監査: install スクリプト持ちは `package-lock.json` を `"hasInstallScript": true` で grep（現状 electron/electron-winstaller/es5-ext/fsevents）。git/remote 依存の有無は `"resolved": "git`/非 registry URL を grep（現状ゼロ）で確認できる
+
 ### Claude Code スキル
 
 - `/release <version>` — README更新 → タグ作成 → push。mainブランチ上でのみ使用。**注意**: スキルは README を main へ直接コミットする手順だが本リポジトリは main 直接禁止 → `docs/readme-vX.Y.Z` ブランチで PR 作成 → マージしてからタグ push する
