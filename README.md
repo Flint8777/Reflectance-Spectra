@@ -163,8 +163,8 @@ npm run test:run
 
 ### 使用技術
 
-- Electron 41
-- React 18
+- Electron 42
+- React 19
 - Plotly.js v3（WebGL）
 - Vite 8
 - Vitest 4
