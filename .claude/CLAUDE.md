@@ -145,6 +145,8 @@ brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuff
 
 リリース手順：`vX.Y.Z` タグを作成してpushするだけ。タグのバージョンがビルド時に `package.json` へ注入される。
 
+- **ローカル `npm run electron:build:win` はタグ注入を経ない**ため package.json の version（コミット上 `2.3.1` 固定）がそのまま EXE ラベルになる。正しい版の配布物は必ずタグ push → `release.yml` で生成する（手元の検証 EXE はラベルが古くても中身は最新）
+
 **Dependabot / OSV 運用**:
 - OSV-Scanner は dev/推移依存の脆弱性でも `exit 1` で CI を落とす。`package.json` の range 内なら `npm update <pkg>` で lockfile のみ更新して解消できる（例: axios←wait-on, tmp←tmp-promise）
 - このリポジトリは GitHub auto-merge 無効。Dependabot PR は CI green 確認後 `gh pr merge <n> --squash --delete-branch` で手動マージ。lockfile を触る PR は1件マージ毎に残りが CONFLICTING になるので `@dependabot rebase` コメントで順次リベースして解決する
@@ -187,7 +189,7 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 
 - ファイル input の同じファイル再選択で `onChange` が発火しない。`onClick={e => e.target.value = ''}` で毎回 reset
 - `electron/main.cjs` の変更は HMR 対象外。反映に `taskkill //F //IM electron.exe` → `npm run dev` 再実行
-- Plotly のズーム状態は `react-plotly.js` の onRelayout だけだと漏れる。`plotRef.current?.el.on('plotly_relayout')` で直接購読
+- Plotly のグラフ div は `getPlotEl()` = `plotRef.current?.el ?? plotRef.current` で取得（**react-plotly.js v4 で ref がグラフ div を直接指す**ようになった。v2 は instance.el。直アクセスすると crosshair/座標表示/ズーム検知が全滅）。ズーム状態は onRelayout prop だと漏れるので `getPlotEl().on('plotly_relayout')` で直接購読
 - Playwright MCP のファイルアップロードは `.playwright-mcp/fixtures/` 配下に置く（プロジェクトルート内必須）
 - Vite v8 (Rolldown) は CJS の `__esModule: true` を unwrap せず `import X from 'cjs-pkg'` が `{ default: fn, __esModule: true }` を返すことがある → `X?.default ?? X` で吸収（App.jsx の Plot / Plotly import が該当）。症状は React の "Element type is invalid: ... got: object"
 - 大型依存更新（plotly / vite / electron のメジャー bump）後に optimizer 由来の interop 不具合が出たら `rm -rf node_modules/.vite` でキャッシュをクリアしてから `npm run dev`
