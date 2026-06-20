@@ -631,6 +631,8 @@ export default function App() {
     const [cross, setCross] = useState({ x: null, y: null })
     const [relabMeta, setRelabMeta] = useState({})
     const plotRef = useRef(null)
+    // react-plotly.js v4 は ref にグラフ div を直接渡す（v2 は instance.el にDOMを持つ）。両対応で取り出す。
+    const getPlotEl = useCallback(() => plotRef.current?.el ?? plotRef.current, [])
     const animFrame = useRef(0)
     // 次のカラーインデックスをトラックし、複数回の追加でも重複しないようにする
     // グループごとの独立カラーカウンタ: { [groupId]: nextPaletteIdx }
@@ -1125,12 +1127,12 @@ export default function App() {
     const resetZoom = useCallback(() => {
         setXRange(null); setYRange(null)
         // Plotly 内部 autorange も明示的に戻す（onRelayout 経由で state が更新されないケースに備え）
-        const plotEl = plotRef.current?.el
+        const plotEl = getPlotEl()
         if (plotEl && window.Plotly) {
             try { window.Plotly.relayout(plotEl, { 'xaxis.autorange': true, 'yaxis.autorange': true }) } catch { }
         }
         setPlotIsZoomed(false)
-    }, [])
+    }, [getPlotEl])
 
     // 凡例のドラッグ＆ドロップ並び替え: 全並列配列を同じ順で並べ替え、custom モードへ自動切替
     const reorderLegendItem = useCallback((fromIdx, toIdx, position) => {
@@ -1159,7 +1161,7 @@ export default function App() {
             const v = parseFloat(t)
             return Number.isFinite(v) ? v : null
         }
-        const fullLayout = plotRef.current?.el?._fullLayout
+        const fullLayout = getPlotEl()?._fullLayout
         const label = axis.toUpperCase()
         if (axis === 'x') {
             const cur = fullLayout?.xaxis?.range
@@ -1184,7 +1186,7 @@ export default function App() {
                 setNotice({ type: 'warning', message: `Invalid ${label} range: minimum must be less than maximum.`, id: Date.now() })
             }
         }
-    }, [xMinInput, xMaxInput, yMinInput, yMaxInput])
+    }, [xMinInput, xMaxInput, yMinInput, yMaxInput, getPlotEl])
 
     const handleRangeKeyDown = useCallback((axis, e) => {
         if (e.key === 'Enter') {
@@ -1308,14 +1310,14 @@ export default function App() {
 
     const onMouseMove = useCallback(ev => {
         if (animFrame.current) cancelAnimationFrame(animFrame.current)
-        const plotEl = plotRef.current?.el; if (!plotEl) return
+        const plotEl = getPlotEl(); if (!plotEl) return
         const rect = plotEl.getBoundingClientRect()
         const px = ev.clientX - rect.left; const py = ev.clientY - rect.top
         animFrame.current = requestAnimationFrame(() => setCross({ x: Math.max(0, Math.min(rect.width, px)), y: Math.max(0, Math.min(rect.height, py)) }))
-    }, [])
+    }, [getPlotEl])
 
     React.useEffect(() => {
-        const plotEl = plotRef.current?.el; if (!plotEl) return
+        const plotEl = getPlotEl(); if (!plotEl) return
         const move = ev => onMouseMove(ev)
         const leave = () => setCross({ x: null, y: null })
         plotEl.addEventListener('mousemove', move)
@@ -1325,17 +1327,18 @@ export default function App() {
             plotEl.removeEventListener('mouseleave', leave)
             cancelAnimationFrame(animFrame.current)
         }
-    }, [onMouseMove])
+    }, [onMouseMove, getPlotEl])
 
     const dataCoord = useMemo(() => {
-        if (!plotRef.current || cross.x == null || cross.y == null) return { x: null, y: null }
-        const plotEl = plotRef.current.el; const gd = plotEl && plotEl._fullLayout
+        const plotEl = getPlotEl()
+        if (!plotEl || cross.x == null || cross.y == null) return { x: null, y: null }
+        const gd = plotEl._fullLayout
         if (!gd) return { x: null, y: null }
         const xaxis = gd.xaxis; const yaxis = gd.yaxis
         const xv = xaxis.p2l ? xaxis.p2l(cross.x - xaxis._offset) : null
         const yv = yaxis.p2l ? yaxis.p2l(cross.y - yaxis._offset) : null
         return { x: xv, y: yv }
-    }, [cross])
+    }, [cross, getPlotEl])
 
     const displayYLabel = useMemo(() => {
         let base = yLabel
@@ -1407,7 +1410,7 @@ export default function App() {
 
     // Plotly のズーム状態を直接監視（onRelayout prop が発火しないケースへの保険）
     React.useEffect(() => {
-        const plotEl = plotRef.current?.el
+        const plotEl = getPlotEl()
         if (!plotEl) return
         const update = () => {
             const fl = plotEl._fullLayout
@@ -1429,7 +1432,7 @@ export default function App() {
                 plotEl.removeListener('plotly_afterplot', update)
             }
         }
-    }, [traces.length])
+    }, [traces.length, getPlotEl])
 
     // グループコンテキストメニュー: メニュー外クリックで閉じる
     React.useEffect(() => {
