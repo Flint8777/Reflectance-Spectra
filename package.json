@@ -27,13 +27,13 @@
         "papaparse": "^5.4.1"
     },
     "devDependencies": {
-        "@vitejs/plugin-react": "^6.0.2",
+        "@vitejs/plugin-react": "^6.0.3",
         "@testing-library/react": "^16.0.0",
         "@testing-library/jest-dom": "^6.5.0",
         "jsdom": "^29.1.1",
         "vitest": "^4.1.9",
-        "vite": "^8.0.16",
-        "electron": "^42.4.1",
+        "vite": "^8.1.0",
+        "electron": "^42.5.0",
         "electron-builder": "^26.15.3",
         "concurrently": "^10.0.3",
         "wait-on": "^9.0.10"
