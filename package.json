@@ -1,78 +1,81 @@
 {
-    "name": "reflectance-spectra-viewer",
-    "private": true,
-    "version": "2.3.1",
-    "description": "FT-IR Reflectance Spectra Viewer",
-    "author": "Your Name",
-    "main": "electron/main.cjs",
-    "type": "module",
-    "scripts": {
-        "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-        "build": "vite build",
-        "preview": "vite preview",
-        "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-        "electron:build": "vite build && electron-builder",
-        "electron:build:win": "vite build && electron-builder --win",
-        "electron:build:mac": "vite build && electron-builder --mac",
-        "electron:build:all": "vite build && electron-builder --win --mac",
-        "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json -Raw | ConvertFrom-Json).version; $parent='Reflectance Spectra Viewer'; $src=Join-Path 'dist-electron' 'win-unpacked'; $dst=Join-Path 'dist-electron' $parent; if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; Copy-Item -Path $src -Destination $dst -Recurse; $zip=Join-Path 'dist-electron' ('Reflectance-Spectra-Viewer-v{0}-windows-portable.zip' -f $v); if (Test-Path $zip) { Remove-Item -Force $zip }; Compress-Archive -Path $dst -DestinationPath $zip -Force; Remove-Item -Recurse -Force $dst\"",
-        "test": "vitest",
-        "test:run": "vitest run"
+  "name": "reflectance-spectra-viewer",
+  "private": true,
+  "version": "2.3.1",
+  "description": "FT-IR Reflectance Spectra Viewer",
+  "author": "Your Name",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "electron:build:win": "vite build && electron-builder --win",
+    "electron:build:mac": "vite build && electron-builder --mac",
+    "electron:build:all": "vite build && electron-builder --win --mac",
+    "pack:zip": "powershell -NoProfile -Command \"$v=(Get-Content package.json -Raw | ConvertFrom-Json).version; $parent='Reflectance Spectra Viewer'; $src=Join-Path 'dist-electron' 'win-unpacked'; $dst=Join-Path 'dist-electron' $parent; if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }; Copy-Item -Path $src -Destination $dst -Recurse; $zip=Join-Path 'dist-electron' ('Reflectance-Spectra-Viewer-v{0}-windows-portable.zip' -f $v); if (Test-Path $zip) { Remove-Item -Force $zip }; Compress-Archive -Path $dst -DestinationPath $zip -Force; Remove-Item -Recurse -Force $dst\"",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "biome check .",
+    "lint:fix": "biome check . --write"
+  },
+  "dependencies": {
+    "papaparse": "^5.4.1",
+    "plotly.js-dist-min": "^3.6.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "react-plotly.js": "^4.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.9",
+    "@testing-library/jest-dom": "^6.5.0",
+    "@testing-library/react": "^16.0.0",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^10.0.3",
+    "electron": "^42.4.1",
+    "electron-builder": "^26.15.3",
+    "jsdom": "^29.1.1",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9",
+    "wait-on": "^9.0.10"
+  },
+  "optionalDependencies": {
+    "dmg-license": "^1.0.11"
+  },
+  "allowScripts": {
+    "electron": true
+  },
+  "build": {
+    "appId": "com.reflectance.spectra.viewer",
+    "productName": "Reflectance Spectra Viewer",
+    "icon": "electron/icons/icon.png",
+    "directories": {
+      "output": "dist-electron"
     },
-    "dependencies": {
-        "plotly.js-dist-min": "^3.6.0",
-        "react": "^19.2.7",
-        "react-dom": "^19.2.7",
-        "react-plotly.js": "^4.0.0",
-        "papaparse": "^5.4.1"
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ],
+      "icon": "electron/icons/icon.ico"
     },
-    "devDependencies": {
-        "@vitejs/plugin-react": "^6.0.2",
-        "@testing-library/react": "^16.0.0",
-        "@testing-library/jest-dom": "^6.5.0",
-        "jsdom": "^29.1.1",
-        "vitest": "^4.1.9",
-        "vite": "^8.0.16",
-        "electron": "^42.4.1",
-        "electron-builder": "^26.15.3",
-        "concurrently": "^10.0.3",
-        "wait-on": "^9.0.10"
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.education"
     },
-    "optionalDependencies": {
-        "dmg-license": "^1.0.11"
-    },
-    "allowScripts": {
-        "electron": true
-    },
-    "build": {
-        "appId": "com.reflectance.spectra.viewer",
-        "productName": "Reflectance Spectra Viewer",
-        "icon": "electron/icons/icon.png",
-        "directories": {
-            "output": "dist-electron"
-        },
-        "files": [
-            "dist/**/*",
-            "electron/**/*"
-        ],
-        "win": {
-            "target": [
-                "portable"
-            ],
-            "icon": "electron/icons/icon.ico"
-        },
-        "mac": {
-            "target": [
-                "dmg",
-                "zip"
-            ],
-            "category": "public.app-category.education"
-        },
-        "nsis": {
-            "oneClick": false,
-            "allowToChangeInstallationDirectory": true,
-            "createDesktopShortcut": true,
-            "createStartMenuShortcut": true
-        }
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     }
+  }
 }
