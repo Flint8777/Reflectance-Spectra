@@ -10,6 +10,7 @@
             "**",
             "!**/dist",
             "!**/dist-electron",
+            "!**/.claude",
             "!package-lock.json"
         ]
     },

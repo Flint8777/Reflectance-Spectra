@@ -2348,6 +2348,7 @@ export default function App() {
     }, [traceGroupIds]);
 
     // Plotly のズーム状態を直接監視（onRelayout prop が発火しないケースへの保険）
+    // biome-ignore lint/correctness/useExhaustiveDependencies: traces.length は意図的。本数が変わると Plotly が描画要素を作り直すため、リスナーを貼り直す必要がある
     React.useEffect(() => {
         const plotEl = getPlotEl();
         if (!plotEl) return;
@@ -2442,6 +2443,7 @@ export default function App() {
     }, []);
 
     return (
+        // biome-ignore lint/a11y/noStaticElementInteractions: ファイルのドロップ領域。クリック操作ではなく、キーボードからは同等機能のファイル選択ボタンを用意している
         <div
             className="app"
             onDragOver={(e) => {
@@ -2728,6 +2730,8 @@ export default function App() {
                     {/* グループパネル（ドラッグ＆ドロップで移動/コピー） */}
                     <div className="group-panel">
                         {groups.map((g) => (
+                            // biome-ignore lint/a11y/useKeyWithClickEvents: マウス前提のグループ操作（右クリックメニュー・スペクトルのドロップ先）。セマンティックな button 化は表示崩れを伴うため別途対応
+                            // biome-ignore lint/a11y/noStaticElementInteractions: 同上
                             <div
                                 key={g.id}
                                 className={`group-item ${g.id === activeGroupId ? 'active' : ''} ${groupToggleState[g.id] === 'hide' ? 'hide' : 'show'}`}
@@ -2989,6 +2993,7 @@ export default function App() {
                                 )
                                     classes.push('drag-over-after');
                                 return (
+                                    // biome-ignore lint/a11y/noStaticElementInteractions: ドラッグ＆ドロップによる並べ替え専用。キーボードでの等価操作は存在しない
                                     <div
                                         key={idx}
                                         className={classes.join(' ')}
@@ -3078,6 +3083,8 @@ export default function App() {
                                         >
                                             <UnloadIcon />
                                         </button>
+                                        {/* biome-ignore lint/a11y/useKeyWithClickEvents: 色見本のクリック／ダブルクリック専用。button 化は既存のサイズ・枠線指定が崩れるため別途対応 */}
+                                        {/* biome-ignore lint/a11y/noStaticElementInteractions: 同上 */}
                                         <div
                                             className="color-box"
                                             style={{
@@ -3112,6 +3119,8 @@ export default function App() {
                                 const indeterminate =
                                     !allVisible && !noneVisible;
                                 return (
+                                    // biome-ignore lint/a11y/noStaticElementInteractions: 内部に input / button を含むコンテナ。button 化すると対話要素の入れ子になり不正なため role は付けない
+                                    // biome-ignore lint/a11y/useKeyWithClickEvents: 同上
                                     <div
                                         key={`group-${group.fname}`}
                                         className="legend-item legend-group-header"
@@ -3642,10 +3651,10 @@ function HeaderSelectDialog({ candidates, onSelect, onCancel }) {
                 <h3>Select Axis Labels</h3>
                 <p>Different headers were detected. Choose the pair to use.</p>
                 <div className="header-candidates">
-                    {candidates.map((h, i) => (
+                    {candidates.map((h) => (
                         <button
                             type="button"
-                            key={i}
+                            key={`${h.xLabel} ${h.yLabel}`}
                             className="header-candidate-btn"
                             onClick={() => onSelect(h)}
                         >
@@ -3729,8 +3738,9 @@ function LabelSettingDialog({
                 <div className="custom-section">
                     <h4 style={{ marginTop: 0 }}>Custom Labels</h4>
                     <div className="input-group">
-                        <label>X label:</label>
+                        <label htmlFor="custom-x-label">X label:</label>
                         <input
+                            id="custom-x-label"
                             value={customX}
                             onChange={(e) => {
                                 setCustomX(e.target.value);
@@ -3740,8 +3750,9 @@ function LabelSettingDialog({
                         />
                     </div>
                     <div className="input-group">
-                        <label>Y label:</label>
+                        <label htmlFor="custom-y-label">Y label:</label>
                         <input
+                            id="custom-y-label"
                             value={customY}
                             onChange={(e) => {
                                 setCustomY(e.target.value);
@@ -3847,7 +3858,7 @@ function BulkUnitDialog({ files, selections, onChangeSelection, onApply }) {
                 >
                     {files.map((f, i) => (
                         <div
-                            key={i}
+                            key={`${f.name}-${f.size}-${f.lastModified}`}
                             style={{
                                 display: 'flex',
                                 alignItems: 'center',
