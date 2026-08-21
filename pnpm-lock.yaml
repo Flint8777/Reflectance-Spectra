@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       papaparse:
-        specifier: ^5.4.1
-        version: 5.5.4
+        specifier: ^5.6.0
+        version: 5.6.0
       plotly.js-dist-min:
         specifier: ^3.6.0
         version: 3.6.0
@@ -2019,8 +2019,8 @@ packages:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
     engines: {node: '>=10'}
 
-  papaparse@5.5.4:
-    resolution: {integrity: sha512-SwzWD9gl/ElwYLCI0nUja1mFJzjq2D8ziShfNBa7zCHzkOozeOGDwHWQ+tvCzEZcewecWZ5U7kUopDnG+DFYEQ==}
+  papaparse@5.6.0:
+    resolution: {integrity: sha512-N2vuNQAYGK1/4vs6HJX86+VYU6OkiSTgdJz3JQfTk1y51cFCO/U8gnaeTF4iNE4r57Tt0sV47dUua1/19pxO6Q==}
 
   parenthesis@3.1.8:
     resolution: {integrity: sha512-KF/U8tk54BgQewkJPvB4s/US3VQY68BRDpH638+7O/n58TpnwiwnOtGIOsT2/i+M78s61BBpeC83STB88d8sqw==}
@@ -4986,7 +4986,7 @@ snapshots:
     dependencies:
       yocto-queue: 0.1.0
 
-  papaparse@5.5.4: {}
+  papaparse@5.6.0: {}
 
   parenthesis@3.1.8: {}
 
