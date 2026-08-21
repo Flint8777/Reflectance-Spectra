@@ -21,8 +21,8 @@ importers:
         specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
       react-plotly.js:
-        specifier: ^4.0.0
-        version: 4.0.0(plotly.js@3.5.0(mapbox-gl@1.13.3)(supports-color@10.2.2))(react@19.2.7)
+        specifier: ^4.1.0
+        version: 4.1.0(plotly.js@3.5.0(mapbox-gl@1.13.3)(supports-color@10.2.2))(react@19.2.7)
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.9
@@ -2179,8 +2179,8 @@ packages:
   react-is@17.0.2:
     resolution: {integrity: sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==}
 
-  react-plotly.js@4.0.0:
-    resolution: {integrity: sha512-spKsIYganLXUOoeiUVzUHby1Ea4kK/UKdNRKlxFRfkcB6HlvO1zguqWIdQKwa2AkE+IuCc8lMSy1zmLA6hcgBg==}
+  react-plotly.js@4.1.0:
+    resolution: {integrity: sha512-+CJA9xOY4UjH1RnRqQnpBGoFSzsrB/e7CR4k8AMQ20RkBlXjqkiIVLdIA5N1hinEVdoTdhaS6krKEARyfSixXg==}
     engines: {node: '>=18'}
     peerDependencies:
       plotly.js: '>=3.0.0'
@@ -5188,7 +5188,7 @@ snapshots:
 
   react-is@17.0.2: {}
 
-  react-plotly.js@4.0.0(plotly.js@3.5.0(mapbox-gl@1.13.3)(supports-color@10.2.2))(react@19.2.7):
+  react-plotly.js@4.1.0(plotly.js@3.5.0(mapbox-gl@1.13.3)(supports-color@10.2.2))(react@19.2.7):
     dependencies:
       plotly.js: 3.5.0(mapbox-gl@1.13.3)(supports-color@10.2.2)
       react: 19.2.7
