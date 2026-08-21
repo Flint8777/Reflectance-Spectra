@@ -81,7 +81,6 @@ body,
     overflow: hidden;
 }
 
-
 /* グループパネル */
 .group-panel {
     display: flex;
@@ -237,12 +236,12 @@ body,
 
 .legend-item.drag-over-before::before,
 .legend-item.drag-over-after::after {
-    content: '';
+    content: "";
     position: absolute;
     left: 0;
     right: 0;
     height: 3px;
-    background: #2196F3;
+    background: #2196f3;
     border-radius: 2px;
     pointer-events: none;
     z-index: 2;
@@ -456,7 +455,7 @@ body,
 
 .preset-btn.selected {
     background: #d0e8ff;
-    border-color: #2196F3;
+    border-color: #2196f3;
     font-weight: bold;
 }
 
@@ -484,7 +483,7 @@ body,
 
 .notice-info {
     background: #e3f2fd;
-    border-color: #2196F3;
+    border-color: #2196f3;
     color: #0d47a1;
 }
 
@@ -548,7 +547,7 @@ body,
     border-color: #90caf9;
 }
 
-.norm-option input[type='radio'] {
+.norm-option input[type="radio"] {
     cursor: pointer;
 }
 
@@ -559,7 +558,7 @@ body,
     margin: 4px 0 4px 32px;
     padding: 10px 14px;
     border: 1px solid #cfe3ff;
-    border-left: 3px solid #2196F3;
+    border-left: 3px solid #2196f3;
     background: #f7faff;
     border-radius: 0 6px 6px 0;
 }
@@ -595,7 +594,7 @@ body,
 }
 
 .unit-dialog-header svg {
-    color: #2196F3;
+    color: #2196f3;
 }
 
 .unit-dialog-subtitle {
@@ -682,7 +681,7 @@ body,
 
 .datatype-icon-btn:hover {
     background: #e3f2fd;
-    border-color: #2196F3;
+    border-color: #2196f3;
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
 }
@@ -697,7 +696,7 @@ body,
 }
 
 .datatype-icon-btn:hover svg {
-    color: #2196F3;
+    color: #2196f3;
 }
 
 .datatype-icon-btn span {
@@ -734,7 +733,7 @@ body,
 
 .input-group input[type="text"]:focus {
     outline: none;
-    border-color: #2196F3;
+    border-color: #2196f3;
 }
 
 .dialog-actions {
@@ -774,12 +773,12 @@ body,
 }
 
 .apply-btn {
-    background: #2196F3;
+    background: #2196f3;
     color: white;
 }
 
 .apply-btn:hover {
-    background: #1976D2;
+    background: #1976d2;
 }
 
 .cancel-btn {
@@ -811,7 +810,7 @@ body,
     color: #333;
 }
 
-.inline-range-inputs input[type='number'] {
+.inline-range-inputs input[type="number"] {
     width: 70px;
     padding: 3px 6px;
     font-size: 12px;
@@ -822,7 +821,7 @@ body,
 .inline-apply-btn {
     padding: 4px 6px;
     font-size: 11px;
-    background: #4CAF50;
+    background: #4caf50;
     color: white;
     border: none;
     border-radius: 3px;
@@ -845,7 +844,7 @@ body,
 .inline-range-inputs button:not(.inline-apply-btn) {
     padding: 3px 10px;
     font-size: 11px;
-    background: #4CAF50;
+    background: #4caf50;
     color: white;
     border: none;
     border-radius: 3px;
