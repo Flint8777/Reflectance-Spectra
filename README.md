@@ -141,16 +141,16 @@ XML ラベルファイルと TAB データファイルのペア。XML を先に�
 ```bash
 git clone https://github.com/Flint8777/Reflectance-Spectra.git
 cd Reflectance-Spectra
-npm ci
-npm run electron:build:win   # Windows
-npm run electron:build:mac   # macOS
+pnpm install --frozen-lockfile
+pnpm run electron:build:win   # Windows
+pnpm run electron:build:mac   # macOS
 ```
 
 ### Windows 配布用 ZIP 作成
 
 ```bash
-npm run electron:build:win
-npm run pack:zip
+pnpm run electron:build:win
+pnpm run pack:zip
 ```
 
 生成物: `dist-electron/Reflectance-Spectra-Viewer-vX.Y.Z_win.zip`
@@ -158,7 +158,7 @@ npm run pack:zip
 ### テスト実行
 
 ```bash
-npm run test:run
+pnpm run test:run
 ```
 
 ### 使用技術

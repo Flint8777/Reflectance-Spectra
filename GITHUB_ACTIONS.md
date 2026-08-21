@@ -21,8 +21,8 @@
 
 | ジョブ | ランナー | 内容 |
 |--------|---------|------|
-| `build-web` | ubuntu-latest | `npm run test:run` → `npm run build`（Vite） |
-| `build-electron-windows` | windows-latest | `npm run electron:build:win` |
+| `build-web` | ubuntu-latest | `pnpm run test:run` → `pnpm run build`（Vite） |
+| `build-electron-windows` | windows-latest | `pnpm run electron:build:win` |
 
 - 成果物（Vite dist / Electron Windows ZIP）をアーティファクトとしてアップロード
 - タグ push では動作しない（リリースビルドは `release.yml` が担当）
@@ -45,7 +45,7 @@ Electron アプリを Windows 向け portable ZIP、macOS 向け DMG/ZIP とし�
 - **バージョン注入**: タグ `vX.Y.Z` を検出すると、ルートの `package.json` の `version` を `X.Y.Z` に上書き。これによりElectronウィンドウタイトルが「Reflectance Spectra Viewer (vX.Y.Z)」に自動反映される
 - **Windows ジョブ** (`build-windows`):
   - ネイティブ Rollup バイナリ `@rollup/rollup-win32-x64-msvc` を追加インストール
-  - `npm run electron:build:win` → `npm run pack:zip` で ZIP を作成
+  - `pnpm run electron:build:win` → `pnpm run pack:zip` で ZIP を作成
   - 成果物: `Reflectance-Spectra-Viewer-vX.Y.Z_win.zip`（展開すると `Reflectance Spectra Viewer/` 配下に全ファイル）
   - アーティファクト名: `windows-portable-dist`
 - **macOS ジョブ** (`build-macos-x64` / `build-macos-arm64`):
@@ -87,7 +87,7 @@ main ブランチへの PR 作成時、Vite ビルドが通るか Windows/macOS 
 
 ### 動作概要
 
-- Windows / macOS 環境で `npm run build`（Vite ビルド）を並列実行
+- Windows / macOS 環境で `pnpm run build`（Vite ビルド）を並列実行
 - electron-builder は実行しない（軽量チェック）
 - 成功時は PR にコメントを自動投稿
 - 失敗時は PR のチェックが失敗状態になる
