@@ -53,7 +53,10 @@ describe('buildExportFigure', () => {
             xRange: [0.5, 1.5],
             yRange: [0, 1],
         });
-        expect(out.xaxis).toMatchObject({ autorange: false, range: [0.5, 1.5] });
+        expect(out.xaxis).toMatchObject({
+            autorange: false,
+            range: [0.5, 1.5],
+        });
         expect(out.yaxis).toMatchObject({ autorange: false, range: [0, 1] });
     });
 

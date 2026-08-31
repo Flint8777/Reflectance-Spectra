@@ -155,6 +155,42 @@ export function normalizeAtX(xs, ys, targetX) {
     return ys.map((y) => y / v);
 }
 
+// 論文向けに書き出す図の figure（data + layout）を組み立てる。
+// scattergl は WebGL キャンバスをラスタ画像として SVG に埋め込むため、
+// ベクター出力には SVG レンダラの scatter へ落とす必要がある。
+export function buildExportFigure(traces, layout, options = {}) {
+    const { showLegend = true, xRange = null, yRange = null } = options;
+    const data = (traces ?? []).map((t) => ({
+        ...t,
+        type: t.type === 'scattergl' ? 'scatter' : t.type,
+    }));
+    const withRange = (axis, range) =>
+        range
+            ? { ...axis, autorange: false, range: [range[0], range[1]] }
+            : { ...axis };
+    return {
+        data,
+        layout: {
+            ...layout,
+            paper_bgcolor: '#ffffff',
+            plot_bgcolor: '#ffffff',
+            xaxis: withRange(layout?.xaxis, xRange),
+            yaxis: withRange(layout?.yaxis, yRange),
+            showlegend: showLegend,
+            legend: {
+                bgcolor: 'rgba(255, 255, 255, 0.8)',
+                bordercolor: '#cccccc',
+                borderwidth: 1,
+                ...(layout?.legend ?? {}),
+                x: 1,
+                y: 1,
+                xanchor: 'right',
+                yanchor: 'top',
+            },
+        },
+    };
+}
+
 function parseWhitespaceSeparated(text) {
     const lines = text.split(/\r?\n/);
     const xs = [],
@@ -209,6 +245,46 @@ function IconButton({ onClick, disabled, title, children }) {
         >
             {children}
         </button>
+    );
+}
+
+function ExportIcon() {
+    return (
+        <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+            <polyline points="8 8 12 4 16 8" />
+            <line x1="12" y1="4" x2="12" y2="15" />
+        </svg>
+    );
+}
+
+function LegendIcon() {
+    return (
+        <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="7" y1="9" x2="10" y2="9" />
+            <line x1="13" y1="9" x2="17" y2="9" opacity="0.55" />
+            <line x1="7" y1="14" x2="10" y2="14" />
+            <line x1="13" y1="14" x2="17" y2="14" opacity="0.55" />
+        </svg>
     );
 }
 
@@ -859,6 +935,94 @@ function NormalizationDialog({
     );
 }
 
+function ExportDialog({ onExport, onClose }) {
+    const [format, setFormat] = useState('svg');
+    const [scale, setScale] = useState(4);
+    const [busy, setBusy] = useState(false);
+    return (
+        <div className="dialog-overlay">
+            <div className="dialog-box">
+                <h3>Export figure</h3>
+                <p>
+                    Save the plot as a figure file. Axis labels, the legend and
+                    the current display range are exported as shown.
+                </p>
+                <div className="norm-options">
+                    <label className="norm-option">
+                        <input
+                            type="radio"
+                            name="export-format"
+                            checked={format === 'svg'}
+                            onChange={() => setFormat('svg')}
+                        />
+                        <span>SVG (vector, for publication)</span>
+                    </label>
+                    <label className="norm-option">
+                        <input
+                            type="radio"
+                            name="export-format"
+                            checked={format === 'png'}
+                            onChange={() => setFormat('png')}
+                        />
+                        <span>PNG (raster)</span>
+                    </label>
+                    {format === 'png' && (
+                        <div className="norm-suboptions">
+                            <div className="norm-suboptions-title">
+                                Resolution
+                            </div>
+                            <label className="norm-option">
+                                <input
+                                    type="radio"
+                                    name="export-scale"
+                                    checked={scale === 2}
+                                    onChange={() => setScale(2)}
+                                />
+                                <span>2x screen size</span>
+                            </label>
+                            <label className="norm-option">
+                                <input
+                                    type="radio"
+                                    name="export-scale"
+                                    checked={scale === 4}
+                                    onChange={() => setScale(4)}
+                                />
+                                <span>4x screen size (print quality)</span>
+                            </label>
+                        </div>
+                    )}
+                </div>
+                <div className="dialog-actions">
+                    <button
+                        type="button"
+                        className="cancel-btn"
+                        onClick={onClose}
+                        disabled={busy}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        className="apply-btn"
+                        disabled={busy}
+                        onClick={async () => {
+                            setBusy(true);
+                            await onExport(
+                                format,
+                                format === 'png' ? scale : 1,
+                            );
+                            setBusy(false);
+                            onClose();
+                        }}
+                    >
+                        {busy ? 'Exporting...' : 'Export'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function StackDialog({ gap, onGapChange, onDisable, onClose }) {
     return (
         <div className="dialog-overlay">
@@ -1142,6 +1306,8 @@ export default function App() {
     const [stackEnabled, setStackEnabled] = useState(false);
     const [stackGap, setStackGap] = useState(0);
     const [showStackDialog, setShowStackDialog] = useState(false);
+    const [showExportDialog, setShowExportDialog] = useState(false);
+    const [showPlotLegend, setShowPlotLegend] = useState(true);
 
     // アップデート関連
     const [updateStatus, setUpdateStatus] = useState('idle'); // 'idle'|'checking'|'available'|'downloading'|'no-update'|'error'
@@ -2258,11 +2424,21 @@ export default function App() {
                 showexponent: 'none',
                 showticklabels: !stackEnabled,
             },
-            showlegend: false,
+            showlegend: showPlotLegend,
+            legend: {
+                x: 1,
+                y: 1,
+                xanchor: 'right',
+                yanchor: 'top',
+                bgcolor: 'rgba(255, 255, 255, 0.8)',
+                bordercolor: '#cccccc',
+                borderwidth: 1,
+                font: { size: 12 },
+            },
             hovermode: false,
             dragmode: 'zoom',
         }),
-        [xRange, yRange, xLabel, displayYLabel, stackEnabled],
+        [xRange, yRange, xLabel, displayYLabel, stackEnabled, showPlotLegend],
     );
 
     const config = useMemo(
@@ -2275,6 +2451,60 @@ export default function App() {
             staticPlot: false,
         }),
         [],
+    );
+
+    const exportFigure = useCallback(
+        async (format, scale) => {
+            const gd = getPlotEl();
+            const width = Math.round(gd?.clientWidth || 1200);
+            const height = Math.round(gd?.clientHeight || 800);
+            const full = gd?._fullLayout;
+            const { data, layout: exportLayout } = buildExportFigure(
+                visibleTraces,
+                layout,
+                {
+                    showLegend: showPlotLegend,
+                    xRange: full?.xaxis?.range ?? xRange,
+                    yRange: full?.yaxis?.range ?? yRange,
+                },
+            );
+            const stamp = new Date()
+                .toISOString()
+                .slice(0, 16)
+                .replace(/[-:]/g, '')
+                .replace('T', '-');
+            // 画面外に SVG レンダラのグラフを起こしてから書き出す
+            const holder = document.createElement('div');
+            holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${width}px;height:${height}px;`;
+            document.body.appendChild(holder);
+            try {
+                await Plotly.newPlot(holder, data, exportLayout, {
+                    staticPlot: true,
+                });
+                await Plotly.downloadImage(holder, {
+                    format,
+                    width,
+                    height,
+                    scale,
+                    filename: `spectra_${stamp}`,
+                });
+                setNotice({
+                    type: 'info',
+                    message: `Exported as ${format.toUpperCase()}`,
+                    id: Date.now(),
+                });
+            } catch (err) {
+                setNotice({
+                    type: 'error',
+                    message: `Export failed: ${err.message}`,
+                    id: Date.now(),
+                });
+            } finally {
+                Plotly.purge(holder);
+                holder.remove();
+            }
+        },
+        [getPlotEl, visibleTraces, layout, showPlotLegend, xRange, yRange],
     );
 
     const selectHeader = useCallback((h) => {
@@ -2591,6 +2821,27 @@ export default function App() {
                             />
                         )}
                     </div>
+                    <IconButton
+                        onClick={() => setShowPlotLegend((v) => !v)}
+                        title={
+                            showPlotLegend
+                                ? 'Hide legend in plot'
+                                : 'Show legend in plot (top right)'
+                        }
+                    >
+                        <LegendIcon />
+                    </IconButton>
+                    <IconButton
+                        onClick={() => setShowExportDialog(true)}
+                        disabled={visibleIndices.length === 0}
+                        title={
+                            visibleIndices.length === 0
+                                ? 'Export figure - no visible spectra'
+                                : 'Export figure (SVG / PNG)'
+                        }
+                    >
+                        <ExportIcon />
+                    </IconButton>
                     {window.electronAPI && (
                         <div
                             style={{
@@ -3281,6 +3532,12 @@ export default function App() {
                         setConfirmState(null);
                         if (fn) fn();
                     }}
+                />
+            )}
+            {showExportDialog && (
+                <ExportDialog
+                    onExport={exportFigure}
+                    onClose={() => setShowExportDialog(false)}
                 />
             )}
             {showStackDialog && (
