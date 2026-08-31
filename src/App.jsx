@@ -155,6 +155,79 @@ export function normalizeAtX(xs, ys, targetX) {
     return ys.map((y) => y / v);
 }
 
+// 凡例をデータと重ならない角に置く。各点を [0,1] に正規化し、四隅の候補ボックスに
+// 入る点が最も少ない角を返す（同数なら右上を優先）。
+export function pickLegendCorner(traces, options = {}) {
+    const { xRange = null, yRange = null } = options;
+    const corners = [
+        { x: 1, y: 1, xanchor: 'right', yanchor: 'top' },
+        { x: 0, y: 1, xanchor: 'left', yanchor: 'top' },
+        { x: 1, y: 0, xanchor: 'right', yanchor: 'bottom' },
+        { x: 0, y: 0, xanchor: 'left', yanchor: 'bottom' },
+    ];
+    const list = (traces ?? []).filter((t) => t?.x?.length && t?.y?.length);
+    if (!list.length) return corners[0];
+
+    // 凡例ボックスの大きさ（プロット全体に対する比）をラベル長と本数から見積もる
+    const nameLen = Math.max(6, ...list.map((t) => (t.name ?? '').length));
+    const boxW = Math.min(0.5, 0.1 + 0.012 * nameLen);
+    const boxH = Math.min(0.55, 0.05 + 0.05 * list.length);
+
+    let [xMin, xMax] = xRange ?? [
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+    ];
+    let [yMin, yMax] = yRange ?? [
+        Number.POSITIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+    ];
+    if (!xRange || !yRange) {
+        for (const t of list) {
+            for (let i = 0; i < t.x.length; i++) {
+                const x = t.x[i];
+                const y = t.y[i];
+                if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+                if (!xRange) {
+                    if (x < xMin) xMin = x;
+                    if (x > xMax) xMax = x;
+                }
+                if (!yRange) {
+                    if (y < yMin) yMin = y;
+                    if (y > yMax) yMax = y;
+                }
+            }
+        }
+    }
+    const spanX = xMax - xMin;
+    const spanY = yMax - yMin;
+    if (!(spanX > 0) || !(spanY > 0)) return corners[0];
+
+    const counts = corners.map(() => 0);
+    for (const t of list) {
+        // 点数の多い OPUS series でも一定コストで済むよう間引く
+        const step = Math.max(1, Math.floor(t.x.length / 2000));
+        for (let i = 0; i < t.x.length; i += step) {
+            const x = t.x[i];
+            const y = t.y[i];
+            if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+            const u = (x - xMin) / spanX;
+            const v = (y - yMin) / spanY;
+            if (u < 0 || u > 1 || v < 0 || v > 1) continue;
+            for (let k = 0; k < corners.length; k++) {
+                const c = corners[k];
+                const inX = c.x === 1 ? u >= 1 - boxW : u <= boxW;
+                const inY = c.y === 1 ? v >= 1 - boxH : v <= boxH;
+                if (inX && inY) counts[k]++;
+            }
+        }
+    }
+    let best = 0;
+    for (let k = 1; k < corners.length; k++) {
+        if (counts[k] < counts[best]) best = k;
+    }
+    return corners[best];
+}
+
 // 論文向けに書き出す図の figure（data + layout）を組み立てる。
 // scattergl は WebGL キャンバスをラスタ画像として SVG に埋め込むため、
 // ベクター出力には SVG レンダラの scatter へ落とす必要がある。
@@ -181,11 +254,9 @@ export function buildExportFigure(traces, layout, options = {}) {
                 bgcolor: 'rgba(255, 255, 255, 0.8)',
                 bordercolor: '#cccccc',
                 borderwidth: 1,
+                font: { size: 12 },
                 ...(layout?.legend ?? {}),
-                x: 1,
-                y: 1,
-                xanchor: 'right',
-                yanchor: 'top',
+                ...pickLegendCorner(data, { xRange, yRange }),
             },
         },
     };
@@ -263,27 +334,6 @@ function ExportIcon() {
             <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
             <polyline points="8 8 12 4 16 8" />
             <line x1="12" y1="4" x2="12" y2="15" />
-        </svg>
-    );
-}
-
-function LegendIcon() {
-    return (
-        <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <rect x="3" y="4" width="18" height="16" rx="2" />
-            <line x1="7" y1="9" x2="10" y2="9" />
-            <line x1="13" y1="9" x2="17" y2="9" opacity="0.55" />
-            <line x1="7" y1="14" x2="10" y2="14" />
-            <line x1="13" y1="14" x2="17" y2="14" opacity="0.55" />
         </svg>
     );
 }
@@ -944,8 +994,8 @@ function ExportDialog({ onExport, onClose }) {
             <div className="dialog-box">
                 <h3>Export figure</h3>
                 <p>
-                    Save the plot as a figure file. Axis labels, the legend and
-                    the current display range are exported as shown.
+                    Save the plot as a figure file. The current display range is
+                    kept, and a legend is added in the emptiest corner.
                 </p>
                 <div className="norm-options">
                     <label className="norm-option">
@@ -1307,7 +1357,6 @@ export default function App() {
     const [stackGap, setStackGap] = useState(0);
     const [showStackDialog, setShowStackDialog] = useState(false);
     const [showExportDialog, setShowExportDialog] = useState(false);
-    const [showPlotLegend, setShowPlotLegend] = useState(true);
 
     // アップデート関連
     const [updateStatus, setUpdateStatus] = useState('idle'); // 'idle'|'checking'|'available'|'downloading'|'no-update'|'error'
@@ -2424,21 +2473,11 @@ export default function App() {
                 showexponent: 'none',
                 showticklabels: !stackEnabled,
             },
-            showlegend: showPlotLegend,
-            legend: {
-                x: 1,
-                y: 1,
-                xanchor: 'right',
-                yanchor: 'top',
-                bgcolor: 'rgba(255, 255, 255, 0.8)',
-                bordercolor: '#cccccc',
-                borderwidth: 1,
-                font: { size: 12 },
-            },
+            showlegend: false,
             hovermode: false,
             dragmode: 'zoom',
         }),
-        [xRange, yRange, xLabel, displayYLabel, stackEnabled, showPlotLegend],
+        [xRange, yRange, xLabel, displayYLabel, stackEnabled],
     );
 
     const config = useMemo(
@@ -2463,7 +2502,6 @@ export default function App() {
                 visibleTraces,
                 layout,
                 {
-                    showLegend: showPlotLegend,
                     xRange: full?.xaxis?.range ?? xRange,
                     yRange: full?.yaxis?.range ?? yRange,
                 },
@@ -2504,7 +2542,7 @@ export default function App() {
                 holder.remove();
             }
         },
-        [getPlotEl, visibleTraces, layout, showPlotLegend, xRange, yRange],
+        [getPlotEl, visibleTraces, layout, xRange, yRange],
     );
 
     const selectHeader = useCallback((h) => {
@@ -2821,16 +2859,6 @@ export default function App() {
                             />
                         )}
                     </div>
-                    <IconButton
-                        onClick={() => setShowPlotLegend((v) => !v)}
-                        title={
-                            showPlotLegend
-                                ? 'Hide legend in plot'
-                                : 'Show legend in plot (top right)'
-                        }
-                    >
-                        <LegendIcon />
-                    </IconButton>
                     <IconButton
                         onClick={() => setShowExportDialog(true)}
                         disabled={visibleIndices.length === 0}
