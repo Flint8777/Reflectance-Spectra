@@ -1,16 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-    buildExportFigure,
-    minorDtick,
-    pickLegendPlacement,
-} from '../App.jsx';
+import { buildExportFigure, minorDtick, pickLegendPlacement } from '../App.jsx';
 
 const traces = [
     { x: [1, 2], y: [3, 4], type: 'scattergl', mode: 'lines', name: 'a' },
     { x: [1, 2], y: [5, 6], type: 'scatter', mode: 'lines', name: 'b' },
 ];
 const layout = {
-    xaxis: { title: { text: 'Wavelength', font: { size: 14 } }, autorange: true },
+    xaxis: {
+        title: { text: 'Wavelength', font: { size: 14 } },
+        autorange: true,
+    },
     yaxis: { title: { text: 'Reflectance' }, autorange: true },
     showlegend: false,
 };
@@ -142,7 +141,10 @@ describe('pickLegendPlacement', () => {
         expect(up.x + 0.3).toBeLessThanOrEqual(0.55);
         expect(up.y).toBeGreaterThanOrEqual(0.5);
 
-        const down = pickLegendPlacement([line(1, 0)], { boxW: 0.3, boxH: 0.2 });
+        const down = pickLegendPlacement([line(1, 0)], {
+            boxW: 0.3,
+            boxH: 0.2,
+        });
         expect(down.x).toBeGreaterThanOrEqual(0.45);
         expect(down.y).toBeGreaterThanOrEqual(0.5);
     });
@@ -217,9 +219,9 @@ describe('pickLegendPlacement', () => {
             yRange: [0, 1],
         });
         expect(p.clear).toBe(true);
-        expect(
-            overlapsBox(p, up, { xRange: [1, 0], yRange: [0, 1] }),
-        ).toBe(false);
+        expect(overlapsBox(p, up, { xRange: [1, 0], yRange: [0, 1] })).toBe(
+            false,
+        );
     });
 
     it('NaN や Infinity を含んでも落ちず、有限点だけで判断する', () => {
@@ -242,9 +244,9 @@ describe('pickLegendPlacement', () => {
         const input = [line(0, 1), line(0.2, 0.4)];
         const first = pickLegendPlacement(input, { boxW: 0.3, boxH: 0.2 });
         for (let i = 0; i < 4; i++) {
-            expect(pickLegendPlacement(input, { boxW: 0.3, boxH: 0.2 })).toEqual(
-                first,
-            );
+            expect(
+                pickLegendPlacement(input, { boxW: 0.3, boxH: 0.2 }),
+            ).toEqual(first);
         }
         expect(rand).not.toHaveBeenCalled();
         expect(now).not.toHaveBeenCalled();
