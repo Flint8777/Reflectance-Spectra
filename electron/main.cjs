@@ -232,6 +232,24 @@ ipcMain.handle('download-apply-update', async (event) => {
         '  } catch {',
         '    Write-Error "コピー失敗: $_"',
         '  }',
+        // アイコン資源が変わったことをシェルに通知する（best-effort、ASCII のみ）。
+        // 実測では SHCNE_ASSOCCHANGED を撃っても iconcache*.db は 1 バイトも変わらず、
+        // 更新でアイコンが変わったときに古い絵が残る問題自体は解決しない。
+        // それでも関連付け・アイコン変更時の作法であり 5 ms で済むので、
+        // 実際に更新が成立したときだけ撃つ（Explorer の CPU を使うため無条件では撃たない）。
+        // 失敗しても再起動を妨げないよう try/catch の外に置き、痕跡だけ残す。
+        '  try {',
+        "    if (-not ('Win32.ShellNotify' -as [type])) {",
+        '      $sig = \'[System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern void SHChangeNotify(int wEventId, uint uFlags, System.IntPtr dwItem1, System.IntPtr dwItem2);\'',
+        '      Add-Type -Namespace Win32 -Name ShellNotify -MemberDefinition $sig -ErrorAction Stop',
+        '    }',
+        // SHCNE_ASSOCCHANGED = 0x08000000 / SHCNF_IDLIST(0x0000) | SHCNF_FLUSHNOWAIT(0x3000)
+        // 0x1000 (SHCNF_FLUSH) は配信完了までブロックするので使わない。
+        // 0x2000 は古い SDK の値で flush ビットが落ちる。
+        '    [Win32.ShellNotify]::SHChangeNotify(0x08000000, 0x3000, [IntPtr]::Zero, [IntPtr]::Zero)',
+        '  } catch {',
+        '    "SHChangeNotify failed: $_" | Out-File -FilePath (Join-Path $env:TEMP \'reflectance-update-last.log\') -Append',
+        '  }',
         '}',
         'Start-Sleep -Seconds 1',
         'Remove-Item $zipPath -Force -ErrorAction SilentlyContinue',
@@ -239,7 +257,10 @@ ipcMain.handle('download-apply-update', async (event) => {
         'Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue',
     ].join('\r\n');
 
-    fs.writeFileSync(scriptPath, scriptContent, 'utf-8');
+    // BOM 必須。powershell.exe (5.1) は BOM 無しの .ps1 をシステム ANSI（日本語環境では
+    // cp932）として読むため、上の 'コピー失敗' のような非 ASCII が文字化けする。
+    // install 先に日本語が入ると $destDir の展開まで壊れる。
+    fs.writeFileSync(scriptPath, `\uFEFF${scriptContent}`, 'utf-8');
 
     // cmd /c start で完全に独立したプロセスとして起動（app.quit()に巻き込まれない）
     const ps = spawn(
@@ -250,6 +271,7 @@ ipcMain.handle('download-apply-update', async (event) => {
             '""',
             'powershell.exe',
             '-NoProfile',
+            '-NonInteractive',
             '-ExecutionPolicy',
             'Bypass',
             '-WindowStyle',
