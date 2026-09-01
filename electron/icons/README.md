@@ -2,32 +2,25 @@
 
 This directory contains application icons for the Reflectance Spectra Viewer.
 
-## Required Files
+## Files
 
-- `icon.png` - Main icon (256x256 or larger, PNG format)
-- `icon.ico` - Windows icon (multi-resolution ICO format)
-- `icon.icns` - macOS icon (optional, for macOS builds)
+- `icon.png` — 1024x1024 master icon. Used for macOS builds; electron-builder converts it to `.icns`
+- `icon.ico` — Windows icon (256 / 128 / 64 / 48 / 32 / 16 px in one file)
+- `make_icon.py` — generates both files above
 
-## How to Create Icons
+Both are referenced from `package.json` (`build.icon` and `build.win.icon`).
 
-### 1. Design the Icon
-Create a 256x256 (or 512x512) PNG image representing the application.
-Suggested theme: spectrum/wavelength visualization, graph, or scientific measurement.
+## Design
 
-### 2. Convert to Platform-Specific Formats
+A dark navy rounded tile with three reflectance spectra (white / cyan / orange —
+the app's own colour cycle) sharing an absorption dip, over a faint axis.
+It stays readable down to 16 px and works on light and dark taskbars.
 
-**For Windows (.ico):**
-- Use online converters: https://convertio.co/png-ico/
-- Or use ImageMagick: `convert icon.png -define icon:auto-resize=256,128,64,48,32,16 icon.ico`
+## Regenerating
 
-**For macOS (.icns):**
-- Use online converters or the `iconutil` command on macOS
-- Or use electron-builder auto-conversion from PNG
-
-## Current Status
-⚠️ **Default icons are placeholder.** Please add your custom icon files here.
-
-Once added, rebuild the app:
 ```bash
-npm run electron:build:win
+uv run --with pillow python electron/icons/make_icon.py   # from the repo root
+pnpm run electron:build:win
 ```
+
+Edit the `curves` list in `make_icon.py` to change line shape, colour or spacing.
