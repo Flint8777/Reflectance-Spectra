@@ -50,8 +50,9 @@ let progressSender = null;
 
 // quitAndInstall は失敗しても例外を投げず false を返すだけなので、
 // error イベントを拾わないと UI が「ダウンロード中」のまま固まる。
+// ログは electron-updater 自身の error ハンドラが上の logger 経由で書くので、
+// ここでは二重に書かず UI への転送だけを行う。
 autoUpdater.on('error', (err) => {
-    writeUpdaterLog('error', err?.stack || String(err));
     progressSender?.send('update-error', err?.message ?? String(err));
 });
 autoUpdater.on('download-progress', (p) => {
