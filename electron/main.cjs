@@ -177,26 +177,39 @@ let mainWindow = null;
 // 巨大なファイルを掴まされて固まるのを防ぐ。
 const MAX_OPEN_FILE_BYTES = 64 * 1024 * 1024;
 
-function readOpenFiles(paths) {
+// 同期読み込みだと 64 MB × N を読む間ウィンドウが固まるので、必ず await で読む。
+async function readOpenFiles(paths) {
     const payload = [];
     for (const p of paths) {
         try {
-            if (fs.statSync(p).size > MAX_OPEN_FILE_BYTES) continue;
-            payload.push({ name: path.basename(p), data: fs.readFileSync(p) });
-        } catch {
-            // 読めないファイルは黙って飛ばす（消された・権限が無い等）
+            const stat = await fs.promises.stat(p);
+            if (stat.size > MAX_OPEN_FILE_BYTES) {
+                writeUpdaterLog(
+                    'warn',
+                    `skipped ${p}: ${stat.size} bytes exceeds the ${MAX_OPEN_FILE_BYTES} byte limit`,
+                );
+                continue;
+            }
+            payload.push({
+                name: path.basename(p),
+                data: await fs.promises.readFile(p),
+            });
+        } catch (err) {
+            // 消された・権限が無い等。黙って捨てると原因が追えないので記録する
+            writeUpdaterLog('warn', `could not open ${p}: ${err?.message}`);
         }
     }
     return payload;
 }
 
-function queueOpenFiles(paths) {
-    const payload = readOpenFiles(paths);
+async function queueOpenFiles(paths) {
+    if (!paths.length) return;
+    const payload = await readOpenFiles(paths);
     if (!payload.length) return;
+    // 送れたぶんは貯めない。両方に置くと renderer が起動時の取得と購読の
+    // 二重で受け取り、貯めたぶんは誰も引き取らずに残り続ける。
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('open-files', payload);
-        // 起動直後で renderer が購読前かもしれないので、取りに来られるよう残しておく
-        pendingOpenFiles.push(...payload);
     } else {
         pendingOpenFiles.push(...payload);
     }
@@ -436,51 +449,57 @@ function createWindow() {
     });
 }
 
-// 2 個目のインスタンスは起動せず、開こうとしたファイルを既存のウィンドウへ渡す。
-// 関連付けから開くたびに新しいウィンドウが増えるのを防ぐ。
-if (!app.requestSingleInstanceLock()) {
+const isRegularFile = (p) => {
+    try {
+        return fs.statSync(p).isFile();
+    } catch {
+        return false;
+    }
+};
+
+// 関連付けから開くたびにウィンドウが増えるのを防ぐための単一インスタンス化。
+// インストーラ版に限るのは、ロックの鍵が userData（アプリ名由来）で、
+// portable 版とインストーラ版が同じ鍵を奪い合うため。無条件にすると
+// 「portable を開いているとインストーラ版が無言で起動しない」が起きる。
+const needsSingleInstance = app.isPackaged && isInstallerBuild();
+
+if (needsSingleInstance && !app.requestSingleInstanceLock()) {
+    // 先に起動している方へ渡すのは Chromium がやる。こちらは何もせず終わる
     app.quit();
 } else {
-    app.on('second-instance', (_event, argv) => {
+    if (needsSingleInstance) {
+        app.on('second-instance', (_event, argv) => {
+            queueOpenFiles(filePathsFromArgv(argv, { isFile: isRegularFile }));
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.focus();
+            }
+        });
+    }
+
+    // ロックを取れなかった側で whenReady を予約すると、終了までの間に
+    // 空のウィンドウが一瞬開き、TEMP の掃除まで走ってしまう
+    app.whenReady().then(() => {
+        cleanupDownloadedInstallers();
         queueOpenFiles(
-            filePathsFromArgv(argv, {
-                isFile: (p) => {
-                    try {
-                        return fs.statSync(p).isFile();
-                    } catch {
-                        return false;
-                    }
-                },
-            }),
+            filePathsFromArgv(process.argv, { isFile: isRegularFile }),
         );
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            if (mainWindow.isMinimized()) mainWindow.restore();
-            mainWindow.focus();
-        }
+        createWindow();
+
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
+        });
+    });
+
+    // macOS は引数ではなくこのイベントでファイルが渡る
+    app.on('open-file', (event, filePath) => {
+        event.preventDefault();
+        queueOpenFiles([filePath].filter(isRegularFile));
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
     });
 }
-
-app.whenReady().then(() => {
-    cleanupDownloadedInstallers();
-    queueOpenFiles(
-        filePathsFromArgv(process.argv, {
-            isFile: (p) => {
-                try {
-                    return fs.statSync(p).isFile();
-                } catch {
-                    return false;
-                }
-            },
-        }),
-    );
-    createWindow();
-
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
-});
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
