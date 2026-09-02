@@ -58,7 +58,7 @@
     ],
     "win": {
       "target": [
-        "portable"
+        "dir"
       ],
       "icon": "electron/icons/icon.ico"
     },
