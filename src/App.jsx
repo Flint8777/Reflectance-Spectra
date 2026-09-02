@@ -1447,7 +1447,11 @@ function UpdateDialog({
                 {status === 'checking' && <p>Checking...</p>}
                 {status === 'available' && (
                     <>
-                        <p>A new version is available.</p>
+                        <p>
+                            {info?.installKind === 'portable'
+                                ? 'A new version is available. It installs as a regular app, and this portable copy is removed.'
+                                : 'A new version is available.'}
+                        </p>
                         <p style={{ fontSize: 13, color: '#555' }}>
                             Current: v{info.currentVersion} &rarr; Latest: v
                             {info.latestVersion}
@@ -1466,7 +1470,9 @@ function UpdateDialog({
                                     className="apply-btn"
                                     onClick={onDownload}
                                 >
-                                    Download &amp; apply
+                                    {info?.installKind === 'portable'
+                                        ? 'Download installer'
+                                        : 'Download & apply'}
                                 </button>
                             ) : (
                                 <button
@@ -1519,6 +1525,14 @@ function UpdateDialog({
                             You have the latest version. (v
                             {info?.currentVersion})
                         </p>
+                        {platform === 'win32' &&
+                            info?.installKind === 'portable' && (
+                                <p style={{ fontSize: 13, color: '#555' }}>
+                                    This is the portable copy. Switching to the
+                                    installer keeps the app updating itself and
+                                    adds a Start menu entry.
+                                </p>
+                            )}
                         <div className="dialog-actions">
                             <button
                                 type="button"
@@ -1527,6 +1541,16 @@ function UpdateDialog({
                             >
                                 Close
                             </button>
+                            {platform === 'win32' &&
+                                info?.installKind === 'portable' && (
+                                    <button
+                                        type="button"
+                                        className="apply-btn"
+                                        onClick={onDownload}
+                                    >
+                                        Switch to installer
+                                    </button>
+                                )}
                         </div>
                     </>
                 )}

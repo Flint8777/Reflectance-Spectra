@@ -22,6 +22,7 @@
     "lint:fix": "biome check . --write"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "papaparse": "^5.4.1",
     "plotly.js-dist-min": "^3.6.0",
     "react": "^19.2.7",
@@ -47,6 +48,11 @@
   "packageManager": "pnpm@11.22.0",
   "build": {
     "appId": "com.reflectance.spectra.viewer",
+    "publish": {
+      "provider": "github",
+      "owner": "Flint8777",
+      "repo": "Reflectance-Spectra"
+    },
     "productName": "Reflectance Spectra Viewer",
     "icon": "electron/icons/icon.png",
     "directories": {
@@ -58,7 +64,8 @@
     ],
     "win": {
       "target": [
-        "dir"
+        "dir",
+        "nsis"
       ],
       "icon": "electron/icons/icon.ico"
     },
@@ -70,10 +77,13 @@
       "category": "public.app-category.education"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "perMachine": false,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "shortcutName": "Reflectance Spectra Viewer",
+      "artifactName": "Reflectance-Spectra-Viewer-v${version}_win_setup.${ext}",
+      "include": "build/installer.nsh"
     }
   }
 }

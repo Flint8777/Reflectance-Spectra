@@ -24,7 +24,15 @@
 
 ### Windows
 
-`Reflectance-Spectra-Viewer-vX.Y.Z_win.zip` をダウンロードして解凍し、`Reflectance Spectra Viewer.exe` を実行。
+**インストーラ版（推奨）**
+
+`Reflectance-Spectra-Viewer-vX.Y.Z_win_setup.exe` を実行するとインストールされ、スタートメニューとデスクトップにショートカットが作られます。管理者権限は不要で、ユーザー領域に入ります。アンインストールは「設定 > アプリ」から。
+
+以降はアプリ内の更新ボタンから自動更新されます（新しいインストーラを裏で取得して差し替え、再起動）。署名していないため、初回実行時に SmartScreen の警告が出ます（「詳細情報」→「実行」）。
+
+**portable 版**
+
+`Reflectance-Spectra-Viewer-vX.Y.Z_win.zip` を解凍して `Reflectance Spectra Viewer.exe` を実行。インストールせずに使いたい場合はこちら。更新ボタンを押すとインストーラ版への移行を案内します（移行すると portable のコピーは削除されます。タスクバーにピン留めしていた場合は貼り直してください）。
 
 ### macOS
 
