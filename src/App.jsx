@@ -1431,10 +1431,21 @@ function StackDialog({ gap, onGapChange, onDisable, onClose }) {
     );
 }
 
+// IPC 越しの例外は "Error invoking remote method 'x': Error: 本文" になるので、
+// 利用者に見せる前に内部の前置きを剥がす。
+function cleanIpcErrorMessage(err) {
+    const raw = err?.message ?? String(err ?? '');
+    return raw
+        .replace(/^Error invoking remote method '[^']*':\s*/, '')
+        .replace(/^(Error|TypeError):\s*/, '')
+        .trim();
+}
+
 function UpdateDialog({
     status,
     info,
     progress,
+    errorMessage,
     platform,
     onDownload,
     onOpenBrowser,
@@ -1447,7 +1458,11 @@ function UpdateDialog({
                 {status === 'checking' && <p>Checking...</p>}
                 {status === 'available' && (
                     <>
-                        <p>A new version is available.</p>
+                        <p>
+                            {info?.installKind === 'portable'
+                                ? 'A new version is available. It installs as a regular app, and this portable copy is removed.'
+                                : 'A new version is available.'}
+                        </p>
                         <p style={{ fontSize: 13, color: '#555' }}>
                             Current: v{info.currentVersion} &rarr; Latest: v
                             {info.latestVersion}
@@ -1466,7 +1481,9 @@ function UpdateDialog({
                                     className="apply-btn"
                                     onClick={onDownload}
                                 >
-                                    Download &amp; apply
+                                    {info?.installKind === 'portable'
+                                        ? 'Download installer'
+                                        : 'Download & apply'}
                                 </button>
                             ) : (
                                 <button
@@ -1519,6 +1536,14 @@ function UpdateDialog({
                             You have the latest version. (v
                             {info?.currentVersion})
                         </p>
+                        {platform === 'win32' &&
+                            info?.installKind === 'portable' && (
+                                <p style={{ fontSize: 13, color: '#555' }}>
+                                    This is the portable copy. Switching to the
+                                    installer keeps the app updating itself and
+                                    adds a Start menu entry.
+                                </p>
+                            )}
                         <div className="dialog-actions">
                             <button
                                 type="button"
@@ -1527,13 +1552,25 @@ function UpdateDialog({
                             >
                                 Close
                             </button>
+                            {platform === 'win32' &&
+                                info?.installKind === 'portable' && (
+                                    <button
+                                        type="button"
+                                        className="apply-btn"
+                                        onClick={onDownload}
+                                    >
+                                        Switch to installer
+                                    </button>
+                                )}
                         </div>
                     </>
                 )}
                 {status === 'error' && (
                     <>
                         <p style={{ color: '#c00' }}>
-                            An error occurred while checking.
+                            {errorMessage
+                                ? `Update failed: ${errorMessage}`
+                                : 'An error occurred while checking.'}
                         </p>
                         <div className="dialog-actions">
                             <button
@@ -1651,6 +1688,7 @@ export default function App() {
     const [updateStatus, setUpdateStatus] = useState('idle'); // 'idle'|'checking'|'available'|'downloading'|'no-update'|'error'
     const [updateInfo, setUpdateInfo] = useState(null);
     const [downloadProgress, setDownloadProgress] = useState(null);
+    const [updateError, setUpdateError] = useState(null);
     const [showUpdateDialog, setShowUpdateDialog] = useState(false);
     const [platform, setPlatform] = useState(null);
 
@@ -3013,6 +3051,17 @@ export default function App() {
         return cleanup;
     }, []);
 
+    // 更新の失敗通知。quitAndInstall は例外を投げないので、これが無いと
+    // ダイアログが「ダウンロード中」のまま固まる
+    React.useEffect(() => {
+        if (!window.electronAPI?.onUpdateError) return;
+        const cleanup = window.electronAPI.onUpdateError((message) => {
+            setUpdateError(message);
+            setUpdateStatus('error');
+        });
+        return cleanup;
+    }, []);
+
     const handleCheckUpdate = useCallback(async () => {
         setShowUpdateDialog(true);
         if (
@@ -3026,7 +3075,8 @@ export default function App() {
             const result = await window.electronAPI.checkForUpdate();
             setUpdateInfo(result);
             setUpdateStatus(result.hasUpdate ? 'available' : 'no-update');
-        } catch {
+        } catch (err) {
+            setUpdateError(cleanIpcErrorMessage(err));
             setUpdateStatus('error');
         }
     }, [updateStatus]);
@@ -3037,7 +3087,8 @@ export default function App() {
         try {
             await window.electronAPI.downloadAndApplyUpdate();
             // main.cjs 側で app.quit() が呼ばれる
-        } catch {
+        } catch (err) {
+            setUpdateError(cleanIpcErrorMessage(err));
             setUpdateStatus('error');
         }
     }, []);
@@ -4050,6 +4101,7 @@ export default function App() {
                     status={updateStatus}
                     info={updateInfo}
                     progress={downloadProgress}
+                    errorMessage={updateError}
                     platform={platform}
                     onDownload={handleDownloadUpdate}
                     onOpenBrowser={() => {

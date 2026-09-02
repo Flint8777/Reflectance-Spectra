@@ -4,6 +4,7 @@ const https = require('node:https');
 const fs = require('node:fs');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
+const { autoUpdater } = require('electron-updater');
 
 // 開発環境かどうかの判定
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -12,6 +13,55 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 if (isDev) {
     process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
+
+// 自動ダウンロードはしない（ユーザーがボタンを押してから落とす）。
+// 差分ダウンロードは未検証の経路なので無効にする。
+autoUpdater.autoDownload = false;
+autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.disableDifferentialDownload = true;
+
+// 更新の診断ログ。GUI プロセスの console は捨てられるので、必ずファイルに残す。
+// これが無いと「更新を押したが何も起きない」を後から追えない。
+function writeUpdaterLog(level, message) {
+    try {
+        const file = path.join(app.getPath('userData'), 'updater.log');
+        if (fs.existsSync(file) && fs.statSync(file).size > 1_000_000) {
+            fs.renameSync(file, `${file}.1`);
+        }
+        fs.appendFileSync(
+            file,
+            `${new Date().toISOString()} [${level}] ${message}\n`,
+            'utf-8',
+        );
+    } catch {
+        // ログに書けないことで更新自体を止めない
+    }
+}
+
+autoUpdater.logger = {
+    info: (m) => writeUpdaterLog('info', m),
+    warn: (m) => writeUpdaterLog('warn', m),
+    error: (m) => writeUpdaterLog('error', m),
+    debug: (m) => writeUpdaterLog('debug', m),
+};
+
+// 進捗の送り先。ハンドラのたびに listener を足すと多重送信になるので 1 回だけ登録する。
+let progressSender = null;
+
+// quitAndInstall は失敗しても例外を投げず false を返すだけなので、
+// error イベントを拾わないと UI が「ダウンロード中」のまま固まる。
+// ログは electron-updater 自身の error ハンドラが上の logger 経由で書くので、
+// ここでは二重に書かず UI への転送だけを行う。
+autoUpdater.on('error', (err) => {
+    progressSender?.send('update-error', err?.message ?? String(err));
+});
+autoUpdater.on('download-progress', (p) => {
+    progressSender?.send('download-progress', {
+        percent: Math.round(p.percent ?? 0),
+        receivedBytes: p.transferred ?? 0,
+        totalBytes: p.total ?? 0,
+    });
+});
 
 const pkgPath = path.join(__dirname, '../package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
@@ -117,6 +167,20 @@ function downloadFile(url, dest, onProgress) {
     });
 }
 
+// NSIS インストーラ版は同じフォルダにアンインストーラを置く。
+// zip を展開しただけの portable 版には存在しないので、これで区別できる。
+function isInstallerBuild() {
+    if (process.platform !== 'win32') return false;
+    try {
+        const dir = path.dirname(app.getPath('exe'));
+        return fs.existsSync(
+            path.join(dir, 'Uninstall Reflectance Spectra Viewer.exe'),
+        );
+    } catch {
+        return false;
+    }
+}
+
 function compareVersions(a, b) {
     const pa = a.split('.').map(Number);
     const pb = b.split('.').map(Number);
@@ -148,12 +212,25 @@ let cachedRelease = null;
 ipcMain.handle('check-update', async () => {
     // 開発中は package.json の version（コミット上は固定値）と比較することになり、
     // 常に「更新あり」と出てしまう。適用側と同じく本番版だけで動かす。
+    const installKind = isInstallerBuild() ? 'installer' : 'portable';
     if (!app.isPackaged) {
         return {
             hasUpdate: false,
             currentVersion,
             latestVersion: currentVersion,
             releaseUrl: null,
+            installKind,
+        };
+    }
+    if (installKind === 'installer') {
+        const result = await autoUpdater.checkForUpdates();
+        const latestVersion = result?.updateInfo?.version ?? currentVersion;
+        return {
+            hasUpdate: compareVersions(latestVersion, currentVersion) > 0,
+            currentVersion,
+            latestVersion,
+            releaseUrl: `https://github.com/Flint8777/Reflectance-Spectra/releases/tag/v${latestVersion}`,
+            installKind,
         };
     }
     cachedRelease = await fetchJson(RELEASES_URL);
@@ -164,6 +241,7 @@ ipcMain.handle('check-update', async () => {
         currentVersion,
         latestVersion,
         releaseUrl: cachedRelease.html_url,
+        installKind,
     };
 });
 
@@ -172,128 +250,38 @@ ipcMain.handle('download-apply-update', async (event) => {
         throw new Error('アップデートは本番版のみサポートされています');
     }
 
-    const release = cachedRelease || (await fetchJson(RELEASES_URL));
-    const latestVersion = release.tag_name.replace(/^v/, '');
-    if (compareVersions(latestVersion, currentVersion) <= 0) {
-        throw new Error('すでに最新バージョンです');
+    // インストーラ版: electron-updater が latest.yml を見て差し替える。
+    // 署名していないが、electron-updater は publisherName が無いときは
+    // 署名検証をスキップするので Windows では動く。
+    if (isInstallerBuild()) {
+        progressSender = event.sender;
+        await autoUpdater.downloadUpdate();
+        // 呼び出し元へ戻ってから終了させる（ここで即 quit すると IPC が切れる）
+        setImmediate(() => autoUpdater.quitAndInstall(true, true));
+        return;
     }
 
-    const asset = release.assets.find((a) => {
-        const n = a.name.toLowerCase();
-        return (
-            n.endsWith('.zip') &&
-            (n.includes('windows-portable') || n.includes('_win'))
+    // portable 版: インストーラをダウンロードして起動し、自分は終了する。
+    // インストーラ側（build/installer.nsh）が旧フォルダを片付ける。
+    const release = cachedRelease || (await fetchJson(RELEASES_URL));
+    const asset = release.assets.find((a) =>
+        a.name.toLowerCase().endsWith('_win_setup.exe'),
+    );
+    if (!asset) {
+        throw new Error(
+            'インストーラ（*_win_setup.exe）が見つかりません。Releases から手動で取得してください',
         );
-    });
-    if (!asset) throw new Error('Windows zip アセットが見つかりません');
+    }
 
-    const tempDir = os.tmpdir();
-    const zipDest = path.join(tempDir, asset.name);
-    const exePath = app.getPath('exe');
-    const appDir = path.dirname(exePath);
-
-    await downloadFile(asset.browser_download_url, zipDest, (progress) => {
+    const dest = path.join(os.tmpdir(), asset.name);
+    await downloadFile(asset.browser_download_url, dest, (progress) => {
         event.sender.send('download-progress', progress);
     });
 
-    // PowerShell アップデートスクリプト生成
-    const scriptPath = path.join(tempDir, 'reflectance-update.ps1');
-    const pid = process.pid;
-    const zipPathEscaped = zipDest.replace(/'/g, "''");
-    const exePathEscaped = exePath.replace(/'/g, "''");
-    const destDirEscaped = appDir.replace(/'/g, "''");
-    const tempExtractDir = path.join(tempDir, 'reflectance-update-extract');
-    const tempExtractEscaped = tempExtractDir.replace(/'/g, "''");
-    const exeName = path.basename(exePath);
-    const scriptContent = [
-        // アプリプロセスが完全に終了するまで待機（最大30秒）
-        `try { Wait-Process -Id ${pid} -Timeout 30 -ErrorAction SilentlyContinue } catch {}`,
-        // 子プロセス（GPU・レンダラー等）を強制終了してファイルロックを解放
-        `taskkill /F /IM "${exeName}" /T 2>$null`,
-        'Start-Sleep -Seconds 2',
-        `$zipPath = '${zipPathEscaped}'`,
-        `$exePath = '${exePathEscaped}'`,
-        `$destDir = '${destDirEscaped}'`,
-        `$tempExtract = '${tempExtractEscaped}'`,
-        `$scriptPath = '${scriptPath.replace(/'/g, "''")}'`,
-        // 一時展開先をクリーンアップ
-        'if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract }',
-        // 最大5回リトライしてZIPを一時ディレクトリに展開
-        '$ok = $false',
-        'for ($i = 0; $i -lt 5; $i++) {',
-        '  try {',
-        '    Expand-Archive -LiteralPath $zipPath -DestinationPath $tempExtract -Force -ErrorAction Stop',
-        '    $ok = $true',
-        '    break',
-        '  } catch { Start-Sleep -Seconds 2 }',
-        '}',
-        // ZIPにネストされたフォルダがある場合、その中身を取り出す
-        'if ($ok) {',
-        '  $inner = Get-ChildItem -LiteralPath $tempExtract -Directory',
-        '  $files = Get-ChildItem -LiteralPath $tempExtract -File',
-        '  if ($inner.Count -eq 1 -and $files.Count -eq 0) {',
-        '    $src = $inner[0].FullName',
-        '  } else {',
-        '    $src = $tempExtract',
-        '  }',
-        '  try {',
-        '    Get-ChildItem -LiteralPath $src | Copy-Item -Destination $destDir -Recurse -Force -ErrorAction Stop',
-        '    Start-Process -FilePath $exePath',
-        '  } catch {',
-        '    Write-Error "コピー失敗: $_"',
-        '  }',
-        // アイコン資源が変わったことをシェルに通知する（best-effort、ASCII のみ）。
-        // 実測では SHCNE_ASSOCCHANGED を撃っても iconcache*.db は 1 バイトも変わらず、
-        // 更新でアイコンが変わったときに古い絵が残る問題自体は解決しない。
-        // それでも関連付け・アイコン変更時の作法であり 5 ms で済むので、
-        // 実際に更新が成立したときだけ撃つ（Explorer の CPU を使うため無条件では撃たない）。
-        // 失敗しても再起動を妨げないよう try/catch の外に置き、痕跡だけ残す。
-        '  try {',
-        "    if (-not ('Win32.ShellNotify' -as [type])) {",
-        '      $sig = \'[System.Runtime.InteropServices.DllImport("shell32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] public static extern void SHChangeNotify(int wEventId, uint uFlags, System.IntPtr dwItem1, System.IntPtr dwItem2);\'',
-        '      Add-Type -Namespace Win32 -Name ShellNotify -MemberDefinition $sig -ErrorAction Stop',
-        '    }',
-        // SHCNE_ASSOCCHANGED = 0x08000000 / SHCNF_IDLIST(0x0000) | SHCNF_FLUSHNOWAIT(0x3000)
-        // 0x1000 (SHCNF_FLUSH) は配信完了までブロックするので使わない。
-        // 0x2000 は古い SDK の値で flush ビットが落ちる。
-        '    [Win32.ShellNotify]::SHChangeNotify(0x08000000, 0x3000, [IntPtr]::Zero, [IntPtr]::Zero)',
-        '  } catch {',
-        '    "SHChangeNotify failed: $_" | Out-File -FilePath (Join-Path $env:TEMP \'reflectance-update-last.log\') -Append',
-        '  }',
-        '}',
-        'Start-Sleep -Seconds 1',
-        'Remove-Item $zipPath -Force -ErrorAction SilentlyContinue',
-        'Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue',
-        'Remove-Item $scriptPath -Force -ErrorAction SilentlyContinue',
-    ].join('\r\n');
-
-    // BOM 必須。powershell.exe (5.1) は BOM 無しの .ps1 をシステム ANSI（日本語環境では
-    // cp932）として読むため、上の 'コピー失敗' のような非 ASCII が文字化けする。
-    // install 先に日本語が入ると $destDir の展開まで壊れる。
-    fs.writeFileSync(scriptPath, `\uFEFF${scriptContent}`, 'utf-8');
-
-    // cmd /c start で完全に独立したプロセスとして起動（app.quit()に巻き込まれない）
-    const ps = spawn(
-        'cmd.exe',
-        [
-            '/c',
-            'start',
-            '""',
-            'powershell.exe',
-            '-NoProfile',
-            '-NonInteractive',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-WindowStyle',
-            'Hidden',
-            '-File',
-            scriptPath,
-        ],
-        { detached: true, stdio: 'ignore' },
-    );
-    ps.unref();
-
-    app.quit();
+    // 先に起動してから終了する。インストーラは旧コピーを消す前に少し待つ。
+    const installer = spawn(dest, [], { detached: true, stdio: 'ignore' });
+    installer.unref();
+    setImmediate(() => app.quit());
 });
 
 // ---- ウィンドウ作成 ----

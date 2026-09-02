@@ -54,6 +54,22 @@ jobs:
             }
           }
 
+      - name: Assert update metadata was generated
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "dist-electron/latest.yml")) {
+            throw "latest.yml was not generated - electron-updater cannot work without it"
+          }
+          $setup = Get-ChildItem -Path "dist-electron" -Filter "*_win_setup.exe" -File
+          if (-not $setup) { throw "installer was not built" }
+          # latest.yml の url とアセット名がずれると更新が 404 になる
+          $m = Select-String -Path "dist-electron/latest.yml" -Pattern 'url:\s*(\S+)' | Select-Object -First 1
+          $url = $m.Matches[0].Groups[1].Value
+          if ($url -ne $setup.Name) {
+            throw "latest.yml url ($url) does not match the built installer ($($setup.Name))"
+          }
+          Write-Host "ok: $($setup.Name) / latest.yml"
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v7
         with:
@@ -65,6 +81,9 @@ jobs:
         with:
           files: |
             dist-electron/Reflectance-Spectra-Viewer-v*_win.zip
+            dist-electron/Reflectance-Spectra-Viewer-v*_win_setup.exe
+            dist-electron/Reflectance-Spectra-Viewer-v*_win_setup.exe.blockmap
+            dist-electron/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -295,7 +314,9 @@ jobs:
           ## ダウンロード
 
           ### Windows
-          - \`Reflectance-Spectra-Viewer-${TAG}_win.zip\` — 解凍して \`Reflectance Spectra Viewer.exe\` を実行
+
+          - \`Reflectance-Spectra-Viewer-${TAG}_win_setup.exe\`（推奨） — 実行するとインストールされ、以降はアプリ内の更新ボタンで自動更新されます。以前の portable 版を使っていた場合は自動で片付けられます（タスクバーにピン留めしていた場合は貼り直してください）
+          - \`Reflectance-Spectra-Viewer-${TAG}_win.zip\` — 解凍して \`Reflectance Spectra Viewer.exe\` を実行する従来版
 
           ### macOS
 
@@ -343,7 +364,19 @@ jobs:
             echo "::error::Windows ZIP for the in-app updater: expected exactly 1, found $win"
             fail=1
           fi
-          for pattern in '_mac_x64\.dmg$' '_mac_arm64\.dmg$' '^web-dist-.*\.zip$'; do
+          # インストーラ版の自動更新は latest.yml の url とアセット名の一致に依存する
+          yml=$(gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'latest.yml' --output - 2>/dev/null || true)
+          if [ -z "$yml" ]; then
+            echo "::error::latest.yml is not attached - installer builds cannot update"
+            fail=1
+          else
+            url=$(echo "$yml" | sed -n 's/^[[:space:]]*-\{0,1\}[[:space:]]*url:[[:space:]]*//p' | head -1 | tr -d '\r')
+            if ! echo "$names" | grep -Fxq "$url"; then
+              echo "::error::latest.yml points at '$url' which is not attached to the release"
+              fail=1
+            fi
+          fi
+          for pattern in '_win_setup\.exe$' '_win_setup\.exe\.blockmap$' '_mac_x64\.dmg$' '_mac_arm64\.dmg$' '^web-dist-.*\.zip$'; do
             n=$(echo "$names" | grep -Eic "$pattern" || true)
             if [ "$n" -lt 1 ]; then
               echo "::error::missing asset matching /$pattern/"
