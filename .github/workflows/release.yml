@@ -317,3 +317,37 @@ jobs:
           sed -i 's/^          //' release_notes.md
 
           gh release edit "$TAG" --notes-file release_notes.md --title "Release ${TAG}"
+
+  verify-release-assets:
+    name: Verify release assets
+    runs-on: ubuntu-latest
+    needs: [release-notes]
+    steps:
+      # 過去に v2.1.3 / v2.1.5 / v2.1.6 がアセット 0 個で公開され、
+      # 利用者が更新できないまま取り残された。ここで落とせば気づける。
+      - name: Assert the release has the assets users need
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          names=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          echo "attached assets:"
+          echo "$names" | sed 's/^/  - /'
+
+          fail=0
+          # アプリ内アップデータが探すのはこの 1 個だけ（main.cjs の判定と同じ条件）。
+          # 複数あると .find() が先頭を掴むので、ちょうど 1 個であることまで確かめる。
+          win=$(echo "$names" | grep -Eic '(_win|windows-portable).*\.zip$' || true)
+          if [ "$win" -ne 1 ]; then
+            echo "::error::Windows ZIP for the in-app updater: expected exactly 1, found $win"
+            fail=1
+          fi
+          for pattern in '_mac_x64\.dmg$' '_mac_arm64\.dmg$' '^web-dist-.*\.zip$'; do
+            n=$(echo "$names" | grep -Eic "$pattern" || true)
+            if [ "$n" -lt 1 ]; then
+              echo "::error::missing asset matching /$pattern/"
+              fail=1
+            fi
+          done
+          exit $fail

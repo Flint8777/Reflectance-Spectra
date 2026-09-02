@@ -146,6 +146,16 @@ ipcMain.handle('open-external', (_event, url) => {
 let cachedRelease = null;
 
 ipcMain.handle('check-update', async () => {
+    // 開発中は package.json の version（コミット上は固定値）と比較することになり、
+    // 常に「更新あり」と出てしまう。適用側と同じく本番版だけで動かす。
+    if (!app.isPackaged) {
+        return {
+            hasUpdate: false,
+            currentVersion,
+            latestVersion: currentVersion,
+            releaseUrl: null,
+        };
+    }
     cachedRelease = await fetchJson(RELEASES_URL);
     const latestVersion = cachedRelease.tag_name.replace(/^v/, '');
     const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
