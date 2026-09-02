@@ -48,6 +48,74 @@
   "packageManager": "pnpm@11.22.0",
   "build": {
     "appId": "com.reflectance.spectra.viewer",
+    "fileAssociations": [
+      {
+        "ext": "dpt",
+        "name": "Reflectance spectrum (OPUS data point table)",
+        "description": "Reflectance spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "0",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "1",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "2",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "3",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "4",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "5",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "6",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "7",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "8",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      },
+      {
+        "ext": "9",
+        "name": "Bruker OPUS spectrum",
+        "description": "Bruker OPUS spectrum",
+        "role": "Viewer"
+      }
+    ],
     "publish": {
       "provider": "github",
       "owner": "Flint8777",

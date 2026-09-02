@@ -14,5 +14,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('update-error', handler);
         return () => ipcRenderer.removeListener('update-error', handler);
     },
+    takePendingFiles: () => ipcRenderer.invoke('take-pending-files'),
+    onOpenFiles: (cb) => {
+        const handler = (_event, files) => cb(files);
+        ipcRenderer.on('open-files', handler);
+        return () => ipcRenderer.removeListener('open-files', handler);
+    },
     getPlatform: () => ipcRenderer.invoke('get-platform'),
 });
