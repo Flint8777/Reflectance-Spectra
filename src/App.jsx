@@ -1435,6 +1435,7 @@ function UpdateDialog({
     status,
     info,
     progress,
+    errorMessage,
     platform,
     onDownload,
     onOpenBrowser,
@@ -1557,7 +1558,9 @@ function UpdateDialog({
                 {status === 'error' && (
                     <>
                         <p style={{ color: '#c00' }}>
-                            An error occurred while checking.
+                            {errorMessage
+                                ? `Update failed: ${errorMessage}`
+                                : 'An error occurred while checking.'}
                         </p>
                         <div className="dialog-actions">
                             <button
@@ -1675,6 +1678,7 @@ export default function App() {
     const [updateStatus, setUpdateStatus] = useState('idle'); // 'idle'|'checking'|'available'|'downloading'|'no-update'|'error'
     const [updateInfo, setUpdateInfo] = useState(null);
     const [downloadProgress, setDownloadProgress] = useState(null);
+    const [updateError, setUpdateError] = useState(null);
     const [showUpdateDialog, setShowUpdateDialog] = useState(false);
     const [platform, setPlatform] = useState(null);
 
@@ -3037,6 +3041,17 @@ export default function App() {
         return cleanup;
     }, []);
 
+    // 更新の失敗通知。quitAndInstall は例外を投げないので、これが無いと
+    // ダイアログが「ダウンロード中」のまま固まる
+    React.useEffect(() => {
+        if (!window.electronAPI?.onUpdateError) return;
+        const cleanup = window.electronAPI.onUpdateError((message) => {
+            setUpdateError(message);
+            setUpdateStatus('error');
+        });
+        return cleanup;
+    }, []);
+
     const handleCheckUpdate = useCallback(async () => {
         setShowUpdateDialog(true);
         if (
@@ -3050,7 +3065,8 @@ export default function App() {
             const result = await window.electronAPI.checkForUpdate();
             setUpdateInfo(result);
             setUpdateStatus(result.hasUpdate ? 'available' : 'no-update');
-        } catch {
+        } catch (err) {
+            setUpdateError(err?.message ?? String(err));
             setUpdateStatus('error');
         }
     }, [updateStatus]);
@@ -3061,7 +3077,8 @@ export default function App() {
         try {
             await window.electronAPI.downloadAndApplyUpdate();
             // main.cjs 側で app.quit() が呼ばれる
-        } catch {
+        } catch (err) {
+            setUpdateError(err?.message ?? String(err));
             setUpdateStatus('error');
         }
     }, []);
@@ -4074,6 +4091,7 @@ export default function App() {
                     status={updateStatus}
                     info={updateInfo}
                     progress={downloadProgress}
+                    errorMessage={updateError}
                     platform={platform}
                     onDownload={handleDownloadUpdate}
                     onOpenBrowser={() => {

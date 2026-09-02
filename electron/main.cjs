@@ -20,8 +20,40 @@ autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.disableDifferentialDownload = true;
 
+// 更新の診断ログ。GUI プロセスの console は捨てられるので、必ずファイルに残す。
+// これが無いと「更新を押したが何も起きない」を後から追えない。
+function writeUpdaterLog(level, message) {
+    try {
+        const file = path.join(app.getPath('userData'), 'updater.log');
+        if (fs.existsSync(file) && fs.statSync(file).size > 1_000_000) {
+            fs.renameSync(file, `${file}.1`);
+        }
+        fs.appendFileSync(
+            file,
+            `${new Date().toISOString()} [${level}] ${message}\n`,
+            'utf-8',
+        );
+    } catch {
+        // ログに書けないことで更新自体を止めない
+    }
+}
+
+autoUpdater.logger = {
+    info: (m) => writeUpdaterLog('info', m),
+    warn: (m) => writeUpdaterLog('warn', m),
+    error: (m) => writeUpdaterLog('error', m),
+    debug: (m) => writeUpdaterLog('debug', m),
+};
+
 // 進捗の送り先。ハンドラのたびに listener を足すと多重送信になるので 1 回だけ登録する。
 let progressSender = null;
+
+// quitAndInstall は失敗しても例外を投げず false を返すだけなので、
+// error イベントを拾わないと UI が「ダウンロード中」のまま固まる。
+autoUpdater.on('error', (err) => {
+    writeUpdaterLog('error', err?.stack || String(err));
+    progressSender?.send('update-error', err?.message ?? String(err));
+});
 autoUpdater.on('download-progress', (p) => {
     progressSender?.send('download-progress', {
         percent: Math.round(p.percent ?? 0),

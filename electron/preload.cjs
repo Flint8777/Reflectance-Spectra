@@ -9,5 +9,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('download-progress', handler);
         return () => ipcRenderer.removeListener('download-progress', handler);
     },
+    onUpdateError: (cb) => {
+        const handler = (_event, message) => cb(message);
+        ipcRenderer.on('update-error', handler);
+        return () => ipcRenderer.removeListener('update-error', handler);
+    },
     getPlatform: () => ipcRenderer.invoke('get-platform'),
 });
