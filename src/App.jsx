@@ -1431,6 +1431,16 @@ function StackDialog({ gap, onGapChange, onDisable, onClose }) {
     );
 }
 
+// IPC 越しの例外は "Error invoking remote method 'x': Error: 本文" になるので、
+// 利用者に見せる前に内部の前置きを剥がす。
+function cleanIpcErrorMessage(err) {
+    const raw = err?.message ?? String(err ?? '');
+    return raw
+        .replace(/^Error invoking remote method '[^']*':\s*/, '')
+        .replace(/^(Error|TypeError):\s*/, '')
+        .trim();
+}
+
 function UpdateDialog({
     status,
     info,
@@ -3066,7 +3076,7 @@ export default function App() {
             setUpdateInfo(result);
             setUpdateStatus(result.hasUpdate ? 'available' : 'no-update');
         } catch (err) {
-            setUpdateError(err?.message ?? String(err));
+            setUpdateError(cleanIpcErrorMessage(err));
             setUpdateStatus('error');
         }
     }, [updateStatus]);
@@ -3078,7 +3088,7 @@ export default function App() {
             await window.electronAPI.downloadAndApplyUpdate();
             // main.cjs 側で app.quit() が呼ばれる
         } catch (err) {
-            setUpdateError(err?.message ?? String(err));
+            setUpdateError(cleanIpcErrorMessage(err));
             setUpdateStatus('error');
         }
     }, []);
