@@ -167,6 +167,27 @@ function downloadFile(url, dest, onProgress) {
     });
 }
 
+// 移行で落としたインストーラは TEMP に残る（起動した本人は実行中で消せない）。
+// 次の起動で片付ける。実行中などで消せなければ、そのまた次の起動に回す。
+function cleanupDownloadedInstallers() {
+    try {
+        const dir = os.tmpdir();
+        for (const name of fs.readdirSync(dir)) {
+            if (!/^Reflectance-Spectra-Viewer-v.*_win_setup\.exe$/.test(name)) {
+                continue;
+            }
+            try {
+                fs.unlinkSync(path.join(dir, name));
+                writeUpdaterLog('info', `removed leftover installer: ${name}`);
+            } catch {
+                // 実行中なら消せない。次回に回す
+            }
+        }
+    } catch {
+        // TEMP が読めなくても起動は続ける
+    }
+}
+
 // NSIS インストーラ版は同じフォルダにアンインストーラを置く。
 // zip を展開しただけの portable 版には存在しないので、これで区別できる。
 function isInstallerBuild() {
@@ -263,25 +284,40 @@ ipcMain.handle('download-apply-update', async (event) => {
 
     // portable 版: インストーラをダウンロードして起動し、自分は終了する。
     // インストーラ側（build/installer.nsh）が旧フォルダを片付ける。
-    const release = cachedRelease || (await fetchJson(RELEASES_URL));
-    const asset = release.assets.find((a) =>
-        a.name.toLowerCase().endsWith('_win_setup.exe'),
+    // この経路は electron-updater を通らないので、記録は自分で残す。
+    writeUpdaterLog(
+        'info',
+        `portable install: migrating to the installer build (current ${currentVersion})`,
     );
-    if (!asset) {
-        throw new Error(
-            'インストーラ（*_win_setup.exe）が見つかりません。Releases から手動で取得してください',
+    try {
+        const release = cachedRelease || (await fetchJson(RELEASES_URL));
+        const asset = release.assets.find((a) =>
+            a.name.toLowerCase().endsWith('_win_setup.exe'),
         );
+        if (!asset) {
+            throw new Error(
+                'インストーラ（*_win_setup.exe）が見つかりません。Releases から手動で取得してください',
+            );
+        }
+
+        const dest = path.join(os.tmpdir(), asset.name);
+        writeUpdaterLog(
+            'info',
+            `downloading ${asset.name} (${asset.size} bytes)`,
+        );
+        await downloadFile(asset.browser_download_url, dest, (progress) => {
+            event.sender.send('download-progress', progress);
+        });
+
+        // 先に起動してから終了する。インストーラは旧コピーを消す前に少し待つ。
+        writeUpdaterLog('info', `launching installer: ${dest}`);
+        const installer = spawn(dest, [], { detached: true, stdio: 'ignore' });
+        installer.unref();
+        setImmediate(() => app.quit());
+    } catch (err) {
+        writeUpdaterLog('error', `migration failed: ${err?.stack || err}`);
+        throw err;
     }
-
-    const dest = path.join(os.tmpdir(), asset.name);
-    await downloadFile(asset.browser_download_url, dest, (progress) => {
-        event.sender.send('download-progress', progress);
-    });
-
-    // 先に起動してから終了する。インストーラは旧コピーを消す前に少し待つ。
-    const installer = spawn(dest, [], { detached: true, stdio: 'ignore' });
-    installer.unref();
-    setImmediate(() => app.quit());
 });
 
 // ---- ウィンドウ作成 ----
@@ -354,6 +390,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+    cleanupDownloadedInstallers();
     createWindow();
 
     app.on('activate', () => {
