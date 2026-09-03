@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { autoUpdater } = require('electron-updater');
+const { filePathsFromArgv } = require('./argvFiles.cjs');
 
 // 開発環境かどうかの判定
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -167,6 +168,53 @@ function downloadFile(url, dest, onProgress) {
     });
 }
 
+// ダブルクリックや「プログラムから開く」で渡されたファイル。
+// renderer がまだ用意できていない段階でも受け取れるよう、いったんここに貯める。
+let pendingOpenFiles = [];
+let mainWindow = null;
+
+// 1 ファイルあたりの上限。スペクトルは通常 KB〜MB なので、
+// 巨大なファイルを掴まされて固まるのを防ぐ。
+const MAX_OPEN_FILE_BYTES = 64 * 1024 * 1024;
+
+// 同期読み込みだと 64 MB × N を読む間ウィンドウが固まるので、必ず await で読む。
+async function readOpenFiles(paths) {
+    const payload = [];
+    for (const p of paths) {
+        try {
+            const stat = await fs.promises.stat(p);
+            if (stat.size > MAX_OPEN_FILE_BYTES) {
+                writeUpdaterLog(
+                    'warn',
+                    `skipped ${p}: ${stat.size} bytes exceeds the ${MAX_OPEN_FILE_BYTES} byte limit`,
+                );
+                continue;
+            }
+            payload.push({
+                name: path.basename(p),
+                data: await fs.promises.readFile(p),
+            });
+        } catch (err) {
+            // 消された・権限が無い等。黙って捨てると原因が追えないので記録する
+            writeUpdaterLog('warn', `could not open ${p}: ${err?.message}`);
+        }
+    }
+    return payload;
+}
+
+async function queueOpenFiles(paths) {
+    if (!paths.length) return;
+    const payload = await readOpenFiles(paths);
+    if (!payload.length) return;
+    // 送れたぶんは貯めない。両方に置くと renderer が起動時の取得と購読の
+    // 二重で受け取り、貯めたぶんは誰も引き取らずに残り続ける。
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('open-files', payload);
+    } else {
+        pendingOpenFiles.push(...payload);
+    }
+}
+
 // 移行で落としたインストーラは TEMP に残る（起動した本人は実行中で消せない）。
 // 次の起動で片付ける。実行中などで消せなければ、そのまた次の起動に回す。
 function cleanupDownloadedInstallers() {
@@ -216,6 +264,13 @@ function compareVersions(a, b) {
 // ---- IPC ハンドラ ----
 
 ipcMain.handle('get-platform', () => process.platform);
+
+// 起動時に渡されたファイルを renderer が取りに来る（購読の取りこぼしを防ぐ）
+ipcMain.handle('take-pending-files', () => {
+    const files = pendingOpenFiles;
+    pendingOpenFiles = [];
+    return files;
+});
 
 ipcMain.handle('open-external', (_event, url) => {
     // ALLOWED_EXTERNAL_PREFIXES に一致しない URL は拒否（file:// や cmd: の混入防御）
@@ -373,6 +428,11 @@ function createWindow() {
         );
     }
 
+    mainWindow = win;
+    win.on('closed', () => {
+        if (mainWindow === win) mainWindow = null;
+    });
+
     // HTMLの<title>タグによるウィンドウタイトル上書きを防止
     win.on('page-title-updated', (e) => e.preventDefault());
 
@@ -389,16 +449,57 @@ function createWindow() {
     });
 }
 
-app.whenReady().then(() => {
-    cleanupDownloadedInstallers();
-    createWindow();
+const isRegularFile = (p) => {
+    try {
+        return fs.statSync(p).isFile();
+    } catch {
+        return false;
+    }
+};
 
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
+// 関連付けから開くたびにウィンドウが増えるのを防ぐための単一インスタンス化。
+// インストーラ版に限るのは、ロックの鍵が userData（アプリ名由来）で、
+// portable 版とインストーラ版が同じ鍵を奪い合うため。無条件にすると
+// 「portable を開いているとインストーラ版が無言で起動しない」が起きる。
+const needsSingleInstance = app.isPackaged && isInstallerBuild();
+
+if (needsSingleInstance && !app.requestSingleInstanceLock()) {
+    // 先に起動している方へ渡すのは Chromium がやる。こちらは何もせず終わる
+    app.quit();
+} else {
+    if (needsSingleInstance) {
+        app.on('second-instance', (_event, argv) => {
+            queueOpenFiles(filePathsFromArgv(argv, { isFile: isRegularFile }));
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.focus();
+            }
+        });
+    }
+
+    // ロックを取れなかった側で whenReady を予約すると、終了までの間に
+    // 空のウィンドウが一瞬開き、TEMP の掃除まで走ってしまう
+    app.whenReady().then(() => {
+        cleanupDownloadedInstallers();
+        queueOpenFiles(
+            filePathsFromArgv(process.argv, { isFile: isRegularFile }),
+        );
+        createWindow();
+
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
+        });
     });
-});
+
+    // macOS は引数ではなくこのイベントでファイルが渡る
+    app.on('open-file', (event, filePath) => {
+        event.preventDefault();
+        queueOpenFiles([filePath].filter(isRegularFile));
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
+    });
+}
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {

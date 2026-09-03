@@ -1689,6 +1689,8 @@ export default function App() {
     const [updateInfo, setUpdateInfo] = useState(null);
     const [downloadProgress, setDownloadProgress] = useState(null);
     const [updateError, setUpdateError] = useState(null);
+    // 関連付け・起動引数で渡されたファイル。データタイプを選ぶまで保留する
+    const [pendingOpenFiles, setPendingOpenFiles] = useState([]);
     const [showUpdateDialog, setShowUpdateDialog] = useState(false);
     const [platform, setPlatform] = useState(null);
 
@@ -2939,23 +2941,36 @@ export default function App() {
         setShowLabelDialog(false);
     }, []);
 
-    const handleInitialPreset = useCallback((preset) => {
-        setPresetSelected(preset);
-        if (preset !== 'auto') {
-            if (PRESET_LABELS[preset]) {
-                setXLabel(PRESET_LABELS[preset].x);
-                setYLabel(PRESET_LABELS[preset].y);
+    React.useEffect(() => {
+        if (!presetSelected || pendingOpenFiles.length === 0) return;
+        const files = pendingOpenFiles;
+        // 空配列で置き換えると、この間に届いたぶんを取りこぼす
+        setPendingOpenFiles((prev) => prev.slice(files.length));
+        classifyAndAddFiles(files);
+    }, [presetSelected, pendingOpenFiles, classifyAndAddFiles]);
+
+    const handleInitialPreset = useCallback(
+        (preset) => {
+            setPresetSelected(preset);
+            if (preset !== 'auto') {
+                if (PRESET_LABELS[preset]) {
+                    setXLabel(PRESET_LABELS[preset].x);
+                    setYLabel(PRESET_LABELS[preset].y);
+                }
+                setLockedLabels(true);
+            } else {
+                setLockedLabels(false);
             }
-            setLockedLabels(true);
-        } else {
-            setLockedLabels(false);
-        }
-        setShowPresetDialog(false);
-        setTimeout(() => {
-            const input = document.getElementById('file-input');
-            if (input) input.click();
-        }, 0);
-    }, []);
+            setShowPresetDialog(false);
+            // 関連付けから開かれたときはファイル選択を出さない（渡された分を読む）
+            if (pendingOpenFiles.length > 0) return;
+            setTimeout(() => {
+                const input = document.getElementById('file-input');
+                if (input) input.click();
+            }, 0);
+        },
+        [pendingOpenFiles],
+    );
 
     React.useEffect(() => {
         if (xRange) {
@@ -3049,6 +3064,36 @@ export default function App() {
             setDownloadProgress(data);
         });
         return cleanup;
+    }, []);
+
+    // 関連付けから開かれたファイルを受け取る。
+    // 起動直後は購読前に送られることがあるので、貯まっている分も取りに行く。
+    React.useEffect(() => {
+        if (!window.electronAPI?.takePendingFiles) return;
+        const toFiles = (payload) =>
+            (payload ?? []).map(
+                (f) => new File([new Uint8Array(f.data)], f.name),
+            );
+        // take-pending-files は破壊的な読み出しなので、途中で unmount されても
+        // 捨てない（開発時の StrictMode 二重マウントでファイルが消えるのを防ぐ）
+        window.electronAPI
+            .takePendingFiles()
+            .then((payload) => {
+                const files = toFiles(payload);
+                if (files.length)
+                    setPendingOpenFiles((prev) => [...prev, ...files]);
+            })
+            .catch(() => {
+                // 取得できなくても通常の読み込み手段は残る
+            });
+        const cleanup = window.electronAPI.onOpenFiles?.((payload) => {
+            const files = toFiles(payload);
+            if (files.length)
+                setPendingOpenFiles((prev) => [...prev, ...files]);
+        });
+        return () => {
+            cleanup?.();
+        };
     }, []);
 
     // 更新の失敗通知。quitAndInstall は例外を投げないので、これが無いと

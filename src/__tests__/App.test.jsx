@@ -108,3 +108,44 @@ describe('アップデート機能', () => {
         );
     });
 });
+
+describe('関連付けから開かれたファイル', () => {
+    afterEach(() => {
+        delete window.electronAPI;
+    });
+
+    it('起動時に main へ溜まっているファイルを取りに行き、追加分も購読する', async () => {
+        const takePendingFiles = vi.fn().mockResolvedValue([]);
+        const onOpenFiles = vi.fn().mockReturnValue(() => {});
+        window.electronAPI = {
+            getPlatform: vi.fn().mockResolvedValue('win32'),
+            checkForUpdate: vi.fn().mockResolvedValue({
+                hasUpdate: false,
+                currentVersion: '1.0.0',
+                latestVersion: '1.0.0',
+            }),
+            onDownloadProgress: vi.fn().mockReturnValue(() => {}),
+            takePendingFiles,
+            onOpenFiles,
+        };
+        render(<App />);
+        await waitFor(() => {
+            expect(takePendingFiles).toHaveBeenCalledTimes(1);
+        });
+        expect(onOpenFiles).toHaveBeenCalled();
+    });
+
+    it('受け渡し口を持たない環境（ブラウザ版・旧 preload）でも落ちない', async () => {
+        window.electronAPI = {
+            getPlatform: vi.fn().mockResolvedValue('win32'),
+            checkForUpdate: vi.fn().mockResolvedValue({
+                hasUpdate: false,
+                currentVersion: '1.0.0',
+                latestVersion: '1.0.0',
+            }),
+            onDownloadProgress: vi.fn().mockReturnValue(() => {}),
+        };
+        render(<App />);
+        expect(screen.getByText(/Reflectance/i)).toBeInTheDocument();
+    });
+});
