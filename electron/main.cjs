@@ -6,6 +6,7 @@ const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { autoUpdater } = require('electron-updater');
 const { filePathsFromArgv } = require('./argvFiles.cjs');
+const { OpenFileQueue } = require('./openFileQueue.cjs');
 
 // 開発環境かどうかの判定
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -20,6 +21,8 @@ if (isDev) {
 autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.disableDifferentialDownload = true;
+// Web インストーラは使わない。将来の既定値変更に備えて明示しておく
+autoUpdater.disableWebInstaller = true;
 
 // 更新の診断ログ。GUI プロセスの console は捨てられるので、必ずファイルに残す。
 // これが無いと「更新を押したが何も起きない」を後から追えない。
@@ -170,8 +173,16 @@ function downloadFile(url, dest, onProgress) {
 
 // ダブルクリックや「プログラムから開く」で渡されたファイル。
 // renderer がまだ用意できていない段階でも受け取れるよう、いったんここに貯める。
-let pendingOpenFiles = [];
 let mainWindow = null;
+
+// 送るか貯めるかの判断は openFileQueue.cjs に置いてある（順序をテストで固定するため）
+const openFileQueue = new OpenFileQueue({
+    send: (payload) => {
+        if (!mainWindow || mainWindow.isDestroyed()) return false;
+        mainWindow.webContents.send('open-files', payload);
+        return true;
+    },
+});
 
 // 1 ファイルあたりの上限。スペクトルは通常 KB〜MB なので、
 // 巨大なファイルを掴まされて固まるのを防ぐ。
@@ -204,15 +215,7 @@ async function readOpenFiles(paths) {
 
 async function queueOpenFiles(paths) {
     if (!paths.length) return;
-    const payload = await readOpenFiles(paths);
-    if (!payload.length) return;
-    // 送れたぶんは貯めない。両方に置くと renderer が起動時の取得と購読の
-    // 二重で受け取り、貯めたぶんは誰も引き取らずに残り続ける。
-    if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('open-files', payload);
-    } else {
-        pendingOpenFiles.push(...payload);
-    }
+    openFileQueue.add(await readOpenFiles(paths));
 }
 
 // 移行で落としたインストーラは TEMP に残る（起動した本人は実行中で消せない）。
@@ -266,11 +269,7 @@ function compareVersions(a, b) {
 ipcMain.handle('get-platform', () => process.platform);
 
 // 起動時に渡されたファイルを renderer が取りに来る（購読の取りこぼしを防ぐ）
-ipcMain.handle('take-pending-files', () => {
-    const files = pendingOpenFiles;
-    pendingOpenFiles = [];
-    return files;
-});
+ipcMain.handle('take-pending-files', () => openFileQueue.take());
 
 ipcMain.handle('open-external', (_event, url) => {
     // ALLOWED_EXTERNAL_PREFIXES に一致しない URL は拒否（file:// や cmd: の混入防御）
@@ -429,6 +428,7 @@ function createWindow() {
     }
 
     mainWindow = win;
+    openFileQueue.markRendererNotReady();
     win.on('closed', () => {
         if (mainWindow === win) mainWindow = null;
     });
