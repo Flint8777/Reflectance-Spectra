@@ -3,3 +3,13 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   es5-ext: false
+
+# 推移依存の脆弱性対応（いずれも devDependencies 経由で、配布物には入らない）。
+# 親パッケージが古い版に解決したままなので、ここで下限を上げる。
+# plist> と限定しているのは、0.9 系を使う別の依存を 0.8 系へ引き戻さないため。
+overrides:
+  # ajv が期待する 3 系に留める（4 系へ上げると API が変わる）
+  fast-uri: '^3.1.6'
+  # 0.8 系と 0.9 系で API が違うので、親の版ごとに同じ系列の修正版へ寄せる
+  'plist@3.1.0>@xmldom/xmldom': '^0.8.15'
+  'plist@3.1.1>@xmldom/xmldom': '^0.9.12'
