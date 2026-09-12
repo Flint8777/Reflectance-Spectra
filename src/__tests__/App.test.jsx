@@ -109,6 +109,100 @@ describe('アップデート機能', () => {
     });
 });
 
+describe('macOS の更新導線（DMG を落として Finder で開く）', () => {
+    afterEach(() => {
+        delete window.electronAPI;
+    });
+
+    function macApi(overrides = {}) {
+        return {
+            getPlatform: vi.fn().mockResolvedValue('darwin'),
+            checkForUpdate: vi.fn().mockResolvedValue({
+                hasUpdate: true,
+                currentVersion: '2.13.0',
+                latestVersion: '2.14.0',
+                releaseUrl:
+                    'https://github.com/Flint8777/Reflectance-Spectra/releases/tag/v2.14.0',
+                installKind: 'portable',
+            }),
+            downloadAndApplyUpdate: vi.fn().mockResolvedValue({
+                kind: 'dmg',
+                path: '/Users/me/Downloads/Reflectance.Spectra.Viewer-2.14.0_mac.dmg',
+            }),
+            quitApp: vi.fn().mockResolvedValue(undefined),
+            openExternal: vi.fn(),
+            onDownloadProgress: vi.fn().mockReturnValue(() => {}),
+            ...overrides,
+        };
+    }
+
+    it('更新ありのとき Download DMG ボタンが出て、Release ページを開くボタンは出ない', async () => {
+        window.electronAPI = macApi();
+        render(<App />);
+        fireEvent.click(screen.getByTitle('Check for updates'));
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: 'Download DMG' }),
+            ).toBeInTheDocument();
+        });
+        expect(
+            screen.queryByRole('button', { name: 'Open release page' }),
+        ).toBeNull();
+    });
+
+    it('Download DMG で落として開いたあと、置き換え手順と Quit ボタンが出る', async () => {
+        window.electronAPI = macApi();
+        render(<App />);
+        fireEvent.click(screen.getByTitle('Check for updates'));
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: 'Download DMG' }),
+            ).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Download DMG' }));
+        await waitFor(() => {
+            expect(screen.getByText(/Applications/)).toBeInTheDocument();
+        });
+        expect(
+            window.electronAPI.downloadAndApplyUpdate,
+        ).toHaveBeenCalledTimes(1);
+        expect(
+            screen.getByText(/Reflectance\.Spectra\.Viewer-2\.14\.0_mac\.dmg/),
+        ).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Quit' }));
+        expect(window.electronAPI.quitApp).toHaveBeenCalledTimes(1);
+    });
+
+    it('ダウンロードに失敗したら Release ページを開くボタンに逃がす', async () => {
+        window.electronAPI = macApi({
+            downloadAndApplyUpdate: vi
+                .fn()
+                .mockRejectedValue(
+                    new Error('DMG（*_mac.dmg）が見つかりません'),
+                ),
+        });
+        render(<App />);
+        fireEvent.click(screen.getByTitle('Check for updates'));
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: 'Download DMG' }),
+            ).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Download DMG' }));
+        await waitFor(() => {
+            expect(
+                screen.getByRole('button', { name: 'Open release page' }),
+            ).toBeInTheDocument();
+        });
+        fireEvent.click(
+            screen.getByRole('button', { name: 'Open release page' }),
+        );
+        expect(window.electronAPI.openExternal).toHaveBeenCalledWith(
+            'https://github.com/Flint8777/Reflectance-Spectra/releases/tag/v2.14.0',
+        );
+    });
+});
+
 describe('関連付けから開かれたファイル', () => {
     afterEach(() => {
         delete window.electronAPI;
