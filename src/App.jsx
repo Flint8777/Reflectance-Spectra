@@ -1449,8 +1449,10 @@ function UpdateDialog({
     platform,
     onDownload,
     onOpenBrowser,
+    onQuit,
     onClose,
 }) {
+    const isMac = platform === 'darwin';
     return (
         <div className="dialog-overlay">
             <div className="dialog-box">
@@ -1459,9 +1461,11 @@ function UpdateDialog({
                 {status === 'available' && (
                     <>
                         <p>
-                            {info?.installKind === 'portable'
-                                ? 'A new version is available. It installs as a regular app, and this portable copy is removed.'
-                                : 'A new version is available.'}
+                            {isMac
+                                ? 'A new version is available. The DMG is saved to Downloads and opened in Finder; drag the app to Applications to replace the old one.'
+                                : info?.installKind === 'portable'
+                                  ? 'A new version is available. It installs as a regular app, and this portable copy is removed.'
+                                  : 'A new version is available.'}
                         </p>
                         <p style={{ fontSize: 13, color: '#555' }}>
                             Current: v{info.currentVersion} &rarr; Latest: v
@@ -1484,6 +1488,14 @@ function UpdateDialog({
                                     {info?.installKind === 'portable'
                                         ? 'Download installer'
                                         : 'Download & apply'}
+                                </button>
+                            ) : isMac ? (
+                                <button
+                                    type="button"
+                                    className="apply-btn"
+                                    onClick={onDownload}
+                                >
+                                    Download DMG
                                 </button>
                             ) : (
                                 <button
@@ -1526,8 +1538,37 @@ function UpdateDialog({
                                 marginTop: 8,
                             }}
                         >
-                            The app will restart after download completes.
+                            {isMac
+                                ? 'The DMG opens in Finder when the download completes.'
+                                : 'The app will restart after download completes.'}
                         </p>
+                    </>
+                )}
+                {status === 'downloaded' && (
+                    <>
+                        <p>Opened {info?.dmgPath} in Finder.</p>
+                        <p style={{ fontSize: 13, color: '#555' }}>
+                            Drag Reflectance Spectra Viewer to the Applications
+                            folder and choose Replace, then launch it again.
+                            Quit this app first so the replacement is not in
+                            use.
+                        </p>
+                        <div className="dialog-actions">
+                            <button
+                                type="button"
+                                className="cancel-btn"
+                                onClick={onClose}
+                            >
+                                Close
+                            </button>
+                            <button
+                                type="button"
+                                className="apply-btn"
+                                onClick={onQuit}
+                            >
+                                Quit
+                            </button>
+                        </div>
                     </>
                 )}
                 {status === 'no-update' && (
@@ -1685,7 +1726,7 @@ export default function App() {
     const [showExportDialog, setShowExportDialog] = useState(false);
 
     // アップデート関連
-    const [updateStatus, setUpdateStatus] = useState('idle'); // 'idle'|'checking'|'available'|'downloading'|'no-update'|'error'
+    const [updateStatus, setUpdateStatus] = useState('idle'); // 'idle'|'checking'|'available'|'downloading'|'downloaded'|'no-update'|'error'
     const [updateInfo, setUpdateInfo] = useState(null);
     const [downloadProgress, setDownloadProgress] = useState(null);
     const [updateError, setUpdateError] = useState(null);
@@ -3112,7 +3153,8 @@ export default function App() {
         if (
             updateStatus === 'available' ||
             updateStatus === 'no-update' ||
-            updateStatus === 'downloading'
+            updateStatus === 'downloading' ||
+            updateStatus === 'downloaded'
         )
             return;
         setUpdateStatus('checking');
@@ -3130,8 +3172,13 @@ export default function App() {
         setUpdateStatus('downloading');
         setDownloadProgress(null);
         try {
-            await window.electronAPI.downloadAndApplyUpdate();
-            // main.cjs 側で app.quit() が呼ばれる
+            const result = await window.electronAPI.downloadAndApplyUpdate();
+            // Windows は main.cjs 側で app.quit() が呼ばれる。
+            // macOS は DMG を Finder で開いたところで戻ってくるので、置き換え手順を出す
+            if (result?.kind === 'dmg') {
+                setUpdateInfo((prev) => ({ ...prev, dmgPath: result.path }));
+                setUpdateStatus('downloaded');
+            }
         } catch (err) {
             setUpdateError(cleanIpcErrorMessage(err));
             setUpdateStatus('error');
@@ -4149,6 +4196,7 @@ export default function App() {
                     errorMessage={updateError}
                     platform={platform}
                     onDownload={handleDownloadUpdate}
+                    onQuit={() => window.electronAPI.quitApp?.()}
                     onOpenBrowser={() => {
                         if (updateInfo?.releaseUrl)
                             window.electronAPI.openExternal(
