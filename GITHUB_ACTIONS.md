@@ -48,13 +48,12 @@ Electron アプリを Windows 向け portable ZIP、macOS 向け DMG/ZIP とし�
   - `pnpm run electron:build:win` → `pnpm run pack:zip` で ZIP を作成
   - 成果物: `Reflectance-Spectra-Viewer-vX.Y.Z_win.zip`（展開すると `Reflectance Spectra Viewer/` 配下に全ファイル）
   - アーティファクト名: `windows-portable-dist`
-- **macOS ジョブ** (`build-macos-x64` / `build-macos-arm64`):
-  - x64 は `macos-13`、arm64 は `macos-14` でそれぞれ独立してビルド
-  - ネイティブ Rollup バイナリ `@rollup/rollup-darwin-{arch}` を追加インストール
-  - ビルド後に成果物を以下の名前にリネーム:
-    - `Reflectance.Spectra.Viewer-X.Y.Z_mac_{arch}.dmg`
-    - `Reflectance.Spectra.Viewer-X.Y.Z_mac_{arch}.zip`（展開後すぐ `.app` をダブルクリックで起動可能）
-  - アーティファクト名: `mac-x64-dist` / `mac-arm64-dist`
+- **macOS ジョブ** (`build-macos`):
+  - `macos-15` 上で `electron-builder --mac --universal --dir` を実行。x64 と arm64 を別々にパックしたあと `@electron/universal` が 1 つの `.app` に束ねる（Apple Silicon / Intel 共通）
+  - `lipo -archs` で `x86_64` と `arm64` の両方が入っていることを確認してから ad-hoc 署名し、`hdiutil` で DMG を作る
+  - 成果物: `Reflectance.Spectra.Viewer-X.Y.Z_mac.dmg`
+  - アーティファクト名: `mac-dist`
+  - x64 / arm64 別の DMG（`_mac_x64.dmg` / `_mac_arm64.dmg`）は v2.12.1 までで、v2.13.0 から universal 1 本に統合
 - **web ジョブ** (`build-web`):
   - Vite ビルドのみ実行し、`web-dist-vX.Y.Z.zip` を Release アセットに添付
 - コードサイン: `CSC_IDENTITY_AUTO_DISCOVERY=false`（非署名ビルド）
@@ -70,7 +69,8 @@ git push origin v2.3.0
 ### 注意点
 
 - タグ名は `vX.Y.Z` 形式にすること（`package.json` の version に `X.Y.Z` が注入される）
-- macOS は x64/arm64 を別ジョブでビルドするため、Release アセットは合計 5 ファイル（Windows ZIP × 1、macOS DMG × 2、macOS ZIP × 2）
+- Release アセットは Windows 4 ファイル（`_win_setup.exe` / `.blockmap` / `latest.yml` / `_win.zip`）＋ macOS DMG × 1 ＋ web ZIP × 1。`verify-release-assets` ジョブがこの構成を確かめる
+- macOS の universal DMG は片アーキ版の約 1.7 倍（230 MB 前後）。Electron 本体が両アーキ分入るため
 - `workflow_dispatch`（手動実行）は設定されていないため、タグ push のみがトリガー
 
 ---
@@ -88,7 +88,7 @@ main ブランチへの PR 作成時、Vite ビルドが通るか Windows/macOS 
 ### 動作概要
 
 - Windows / macOS 環境で `pnpm run build`（Vite ビルド）を並列実行
-- electron-builder は実行しない（軽量チェック）
+- Windows は electron-builder を実行しない（軽量チェック）。macOS だけは `electron-builder --mac --universal --dir` まで通し、`lipo` で universal になっていることを確かめる（x64/arm64 の結合失敗はここでしか事前に検出できない）
 - 成功時は PR にコメントを自動投稿
 - 失敗時は PR のチェックが失敗状態になる
 
@@ -128,7 +128,7 @@ main ブランチへの PR 作成時、Vite ビルドが通るか Windows/macOS 
 
 ### 動作概要
 
-- Windows / macOS (x64, arm64) の計 3 環境で並列実行
+- Windows / macOS (`macos-15` = Apple Silicon, `macos-15-intel` = Intel) の計 3 環境で並列実行。macOS は同じ universal DMG を両アーキで起動する
 - ZIP を展開 → アプリを起動 → 5 秒待機 → プロセス名でアプリ稼働確認
 - クラッシュや起動失敗時はエラーを報告
 

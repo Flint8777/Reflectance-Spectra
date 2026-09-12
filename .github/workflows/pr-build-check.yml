@@ -66,7 +66,7 @@ jobs:
 
   build-check-macos:
     name: macOS Build Check
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -83,8 +83,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build (verify only)
-        run: pnpm run build
+      # release.yml と同じ universal パックまで通す。x64/arm64 の .app 結合はここでしか事前に検証できない
+      - name: Build (verify only, universal .app)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: pnpm run build && pnpm exec electron-builder --mac --universal --dir --publish never
+
+      - name: Assert the app bundle is universal
+        run: |
+          app=$(find dist-electron -path "*/mac-universal/*.app" -type d | head -n1)
+          if [ -z "$app" ]; then echo "::error::universal .app was not built"; exit 1; fi
+          archs=$(lipo -archs "$app/Contents/MacOS/Reflectance Spectra Viewer")
+          echo "archs: $archs"
+          case "$archs" in
+            *x86_64*arm64*|*arm64*x86_64*) echo "ok: universal" ;;
+            *) echo "::error::expected x86_64 + arm64, got: $archs"; exit 1 ;;
+          esac
 
       - name: Comment on PR (success)
         if: success()

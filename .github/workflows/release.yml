@@ -87,9 +87,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  build-macos-x64:
-    name: Build macOS (x64) dmg/zip
-    runs-on: macos-14
+  build-macos:
+    name: Build macOS (universal) dmg
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -113,117 +113,52 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build macOS app x64 (cross-compile on arm64)
+      # x64 と arm64 を別々にパックして @electron/universal で 1 つの .app に束ねる。
+      # DMG は後段で hdiutil から作るので、ここでは .app（--dir）だけ出す
+      - name: Build macOS app (universal, no publish)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: pnpm run build && pnpm exec electron-builder --mac --x64 --publish never
+        run: pnpm run build && pnpm exec electron-builder --mac --universal --dir --publish never
 
-      - name: Ad-hoc codesign and re-create x64 DMG
+      # 片方のアーキしか入っていない .app を配ると Intel か Apple Silicon のどちらかで起動できない
+      - name: Assert the app bundle is universal
         run: |
-          app=$(find dist-electron -path "*/mac*/*.app" -type d | head -n1)
+          app=$(find dist-electron -path "*/mac-universal/*.app" -type d | head -n1)
+          if [ -z "$app" ]; then echo "::error::universal .app was not built"; exit 1; fi
+          archs=$(lipo -archs "$app/Contents/MacOS/Reflectance Spectra Viewer")
+          echo "archs: $archs"
+          case "$archs" in
+            *x86_64*arm64*|*arm64*x86_64*) echo "ok: universal" ;;
+            *) echo "::error::expected x86_64 + arm64, got: $archs"; exit 1 ;;
+          esac
+
+      - name: Ad-hoc codesign and create DMG
+        run: |
+          app=$(find dist-electron -path "*/mac-universal/*.app" -type d | head -n1)
           codesign --force --deep --sign - "$app"
           echo "Signed: $app"
-          rm -f dist-electron/*.dmg
           staging=$(mktemp -d)
           cp -R "$app" "$staging/"
           ln -s /Applications "$staging/Applications"
           VERSION=$(node -p 'require("./package.json").version')
+          mkdir -p dist-electron/dmg
           hdiutil create \
             -volname "Reflectance Spectra Viewer" \
             -srcfolder "$staging" \
             -ov -format UDZO \
-            "dist-electron/Reflectance Spectra Viewer-${VERSION}-x64.dmg"
+            "dist-electron/dmg/Reflectance.Spectra.Viewer-${VERSION}_mac.dmg"
           rm -rf "$staging"
 
-      - name: Rename macOS x64 DMG
-        run: |
-          mkdir -p dist-electron/renamed
-          for f in dist-electron/*.dmg; do
-            base="${f##*/}"
-            version=$(echo "$base" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-            [ -n "$version" ] && mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_x64.dmg"
-          done
-
-      - name: Upload macOS x64 artifact
+      - name: Upload macOS artifact
         uses: actions/upload-artifact@v7
         with:
-          name: mac-x64-dist
-          path: dist-electron/renamed
+          name: mac-dist
+          path: dist-electron/dmg
 
-      - name: Attach macOS x64 DMG to Release
+      - name: Attach macOS DMG to Release
         uses: softprops/action-gh-release@v3
         with:
-          files: dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_x64.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos-arm64:
-    name: Build macOS (arm64) dmg/zip
-    runs-on: macos-14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Set version from tag
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          CLEAN="${TAG#v}"
-          node -e "const fs=require('fs');const p=require('./package.json');p.version='${CLEAN}';fs.writeFileSync('./package.json',JSON.stringify(p,null,2));"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build macOS app (no publish)
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-        run: pnpm run build && pnpm exec electron-builder --mac --publish never
-
-      - name: Ad-hoc codesign and re-create arm64 DMG
-        run: |
-          app=$(find dist-electron -path "*/mac*/*.app" -type d | head -n1)
-          codesign --force --deep --sign - "$app"
-          echo "Signed: $app"
-          rm -f dist-electron/*.dmg
-          staging=$(mktemp -d)
-          cp -R "$app" "$staging/"
-          ln -s /Applications "$staging/Applications"
-          VERSION=$(node -p 'require("./package.json").version')
-          hdiutil create \
-            -volname "Reflectance Spectra Viewer" \
-            -srcfolder "$staging" \
-            -ov -format UDZO \
-            "dist-electron/Reflectance Spectra Viewer-${VERSION}-arm64.dmg"
-          rm -rf "$staging"
-
-      - name: Rename macOS arm64 DMG
-        run: |
-          mkdir -p dist-electron/renamed
-          for f in dist-electron/*.dmg; do
-            base="${f##*/}"
-            version=$(echo "$base" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
-            [ -n "$version" ] && mv "$f" "dist-electron/renamed/Reflectance.Spectra.Viewer-${version}_mac_arm64.dmg"
-          done
-
-      - name: Upload macOS arm64 artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: mac-arm64-dist
-          path: dist-electron/renamed
-
-      - name: Attach macOS arm64 DMG to Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: dist-electron/renamed/Reflectance.Spectra.Viewer-*_mac_arm64.dmg
+          files: dist-electron/dmg/Reflectance.Spectra.Viewer-*_mac.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -276,7 +211,7 @@ jobs:
   release-notes:
     name: Generate release notes
     runs-on: ubuntu-latest
-    needs: [build-windows, build-macos-x64, build-macos-arm64, build-web]
+    needs: [build-windows, build-macos, build-web]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -320,13 +255,9 @@ jobs:
 
           ### macOS
 
-          **Intel Mac**
-          - \`Reflectance.Spectra.Viewer-${VER}_mac_x64.dmg\`
+          - \`Reflectance.Spectra.Viewer-${VER}_mac.dmg\` — Apple Silicon / Intel 共通（Universal）。開いて \`Reflectance Spectra Viewer.app\` を Applications にドラッグ。旧版が入っていれば「置き換える」で上書きされます
 
-          **Apple Silicon**
-          - \`Reflectance.Spectra.Viewer-${VER}_mac_arm64.dmg\`
-
-          > **初回起動時の注意**（「開発元が未確認」の警告が出る場合）: アプリを右クリック →「開く」→ 警告ダイアログで再度「開く」
+          > **初回起動時の注意**（「開発元が未確認」の警告が出る場合）: macOS 14 までは アプリを右クリック →「開く」→ 警告ダイアログで再度「開く」。macOS 15 以降は ダブルクリックして一度ブロックされたあと、システム設定 →「プライバシーとセキュリティ」→ 下部の「このまま開く」
 
           ### Web版
           - \`web-dist-${TAG}.zip\` — ブラウザで動作するWeb版（解凍して \`index.html\` を開く）
@@ -376,7 +307,7 @@ jobs:
               fail=1
             fi
           fi
-          for pattern in '_win_setup\.exe$' '_win_setup\.exe\.blockmap$' '_mac_x64\.dmg$' '_mac_arm64\.dmg$' '^web-dist-.*\.zip$'; do
+          for pattern in '_win_setup\.exe$' '_win_setup\.exe\.blockmap$' '_mac\.dmg$' '^web-dist-.*\.zip$'; do
             n=$(echo "$names" | grep -Eic "$pattern" || true)
             if [ "$n" -lt 1 ]; then
               echo "::error::missing asset matching /$pattern/"
