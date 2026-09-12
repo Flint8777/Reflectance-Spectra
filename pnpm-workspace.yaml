@@ -13,3 +13,8 @@ overrides:
   # 0.8 系と 0.9 系で API が違うので、親の版ごとに同じ系列の修正版へ寄せる
   'plist@3.1.0>@xmldom/xmldom': '^0.8.15'
   'plist@3.1.1>@xmldom/xmldom': '^0.9.12'
+  # plotly.js は 3.x/4.x とも maplibre-gl を脆弱な系列（^4.7.1 / ^5.24.0）に pin していて
+  # 修正版 6.4.1 に届かない（GHSA-jrc7-96c5-q579）。アプリは plotly.js-dist-min を使い
+  # plotly.js 本体は react-plotly.js の peer として入るだけで import されないので、
+  # ここで上げても実行時の影響は無い
+  maplibre-gl: '>=6.4.1'
