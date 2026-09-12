@@ -36,16 +36,16 @@
 
 ### macOS
 
-| Mac の種類 | ダウンロードファイル |
-|-----------|------------------|
-| Intel | `Reflectance.Spectra.Viewer-X.Y.Z_mac_x64.dmg` |
-| Apple Silicon | `Reflectance.Spectra.Viewer-X.Y.Z_mac_arm64.dmg` |
+`Reflectance.Spectra.Viewer-X.Y.Z_mac.dmg` を開き、`Reflectance Spectra Viewer.app` を Applications フォルダにドラッグします。Apple Silicon / Intel 共通（Universal Binary）なので、Mac の種類を選ぶ必要はありません。旧版が入っていれば「置き換える」で上書きされます。
+
+アプリ内の更新ボタンは macOS では Releases ページを開くだけなので、更新時も同じ手順で入れ直してください。
 
 **初回起動時の注意**（「開発元が未確認」の警告が出る場合）
 
-1. アプリを右クリック → "開く" を選択
-2. 警告ダイアログで再度 "開く" をクリック
-3. 2回目以降は通常のダブルクリックで起動可能
+- macOS 14 以前: アプリを右クリック → "開く" → 警告ダイアログで再度 "開く"
+- macOS 15 以降: ダブルクリックして一度ブロックされたあと、システム設定 → "プライバシーとセキュリティ" → 下部の "このまま開く"
+
+2回目以降は通常のダブルクリックで起動できます。
 
 ## 使い方
 
@@ -154,7 +154,7 @@ git clone https://github.com/Flint8777/Reflectance-Spectra.git
 cd Reflectance-Spectra
 pnpm install --frozen-lockfile
 pnpm run electron:build:win   # Windows
-pnpm run electron:build:mac   # macOS
+pnpm run electron:build:mac   # macOS（universal）
 ```
 
 ### Windows 配布用 ZIP 作成
