@@ -163,9 +163,9 @@ describe('macOS の更新導線（DMG を落として Finder で開く）', () =
         await waitFor(() => {
             expect(screen.getByText(/Applications/)).toBeInTheDocument();
         });
-        expect(
-            window.electronAPI.downloadAndApplyUpdate,
-        ).toHaveBeenCalledTimes(1);
+        expect(window.electronAPI.downloadAndApplyUpdate).toHaveBeenCalledTimes(
+            1,
+        );
         expect(
             screen.getByText(/Reflectance\.Spectra\.Viewer-2\.14\.0_mac\.dmg/),
         ).toBeInTheDocument();

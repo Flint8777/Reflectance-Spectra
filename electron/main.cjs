@@ -268,6 +268,11 @@ function compareVersions(a, b) {
 
 ipcMain.handle('get-platform', () => process.platform);
 
+// macOS の更新導線用。Finder で .app を置き換える前に自分を終わらせる
+ipcMain.handle('quit-app', () => {
+    setImmediate(() => app.quit());
+});
+
 // 起動時に渡されたファイルを renderer が取りに来る（購読の取りこぼしを防ぐ）
 ipcMain.handle('take-pending-files', () => openFileQueue.take());
 
@@ -334,6 +339,46 @@ ipcMain.handle('download-apply-update', async (event) => {
         // 呼び出し元へ戻ってから終了させる（ここで即 quit すると IPC が切れる）
         setImmediate(() => autoUpdater.quitAndInstall(true, true));
         return;
+    }
+
+    // macOS: 署名していないので electron-updater（Squirrel.Mac）は使えない。
+    // DMG を Downloads に落として Finder で開くところまでを導線にし、
+    // Applications への置き換えは利用者に任せる。自分は終了しない。
+    if (process.platform === 'darwin') {
+        writeUpdaterLog(
+            'info',
+            `macOS: downloading the DMG (current ${currentVersion})`,
+        );
+        try {
+            const release = cachedRelease || (await fetchJson(RELEASES_URL));
+            const asset = release.assets.find((a) =>
+                a.name.toLowerCase().endsWith('_mac.dmg'),
+            );
+            if (!asset) {
+                throw new Error(
+                    'DMG（*_mac.dmg）が見つかりません。Releases から手動で取得してください',
+                );
+            }
+            const dest = path.join(app.getPath('downloads'), asset.name);
+            writeUpdaterLog(
+                'info',
+                `downloading ${asset.name} (${asset.size} bytes) -> ${dest}`,
+            );
+            await downloadFile(asset.browser_download_url, dest, (progress) => {
+                event.sender.send('download-progress', progress);
+            });
+            // Finder が DMG をマウントして Applications へのショートカット付きで開く
+            const openError = await shell.openPath(dest);
+            if (openError) throw new Error(openError);
+            writeUpdaterLog('info', `opened ${dest}`);
+            return { kind: 'dmg', path: dest };
+        } catch (err) {
+            writeUpdaterLog(
+                'error',
+                `dmg download failed: ${err?.stack || err}`,
+            );
+            throw err;
+        }
     }
 
     // portable 版: インストーラをダウンロードして起動し、自分は終了する。

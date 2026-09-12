@@ -21,4 +21,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('open-files', handler);
     },
     getPlatform: () => ipcRenderer.invoke('get-platform'),
+    quitApp: () => ipcRenderer.invoke('quit-app'),
 });

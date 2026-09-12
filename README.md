@@ -38,7 +38,7 @@
 
 `Reflectance.Spectra.Viewer-X.Y.Z_mac.dmg` を開き、`Reflectance Spectra Viewer.app` を Applications フォルダにドラッグします。Apple Silicon / Intel 共通（Universal Binary）なので、Mac の種類を選ぶ必要はありません。旧版が入っていれば「置き換える」で上書きされます。
 
-アプリ内の更新ボタンは macOS では Releases ページを開くだけなので、更新時も同じ手順で入れ直してください。
+新しい版が出ると起動から数秒でツールバーの更新ボタンに赤い点が付きます。ダイアログの **Download DMG** で `~/Downloads` に落として Finder で開くところまで進むので、あとは Applications にドラッグして置き換え、起動し直してください（署名していないため、Windows のような自動差し替えはできません）。
 
 **初回起動時の注意**（「開発元が未確認」の警告が出る場合）
 
