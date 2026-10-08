@@ -1,5 +1,6 @@
 import {
     act,
+    createEvent,
     fireEvent,
     render,
     screen,
@@ -141,5 +142,64 @@ describe('凡例とアンロード', () => {
         fireEvent.click(screen.getByTitle('Unload All'));
         fireEvent.click(document.querySelector('.confirm-dialog .danger-btn'));
         await waitFor(() => expect(plotData()).toHaveLength(0));
+    });
+});
+
+describe('色とグループ', () => {
+    const loadTwo = async () => {
+        startReflectance();
+        await upload([
+            dpt('a.dpt', [
+                [1, 0.1],
+                [2, 0.2],
+            ]),
+            dpt('b.dpt', [
+                [1, 0.3],
+                [2, 0.4],
+            ]),
+        ]);
+        await waitFor(() => expect(plotData()).toHaveLength(2));
+    };
+    const groupTab = (id) =>
+        screen
+            .getAllByTitle(/Drop a spectrum here/)
+            .find((el) => el.textContent === id);
+    // 凡例はファイル名の昇順（a, b）、内部の並びは降順（b, a）なので a.dpt は内部 index 1
+    // jsdom の DragEvent は ctrlKey を初期化できないので、作ったイベントに直接載せる
+    const dropOnGroup = (id, traceIdx, ctrlKey = false) => {
+        const el = groupTab(id);
+        const ev = createEvent.drop(el, {
+            dataTransfer: { getData: () => String(traceIdx) },
+        });
+        Object.defineProperty(ev, 'ctrlKey', { value: ctrlKey });
+        fireEvent(el, ev);
+    };
+
+    it('色見本のクリックでパレットの次の色に変わる', async () => {
+        await loadTwo();
+        const swatch = screen.getAllByTitle(
+            'Click: next color · Double-click: custom color',
+        )[0]; // a.dpt（palette[0]）
+        fireEvent.click(swatch);
+        await waitFor(() => expect(plotData()[1].line.color).toBe('#ff7f0e'));
+        expect(plotData()[0].line.color).toBe('#ff7f0e'); // b.dpt は元のまま
+    });
+
+    it('別グループへドロップすると移動し、今のグループでは非表示になる', async () => {
+        await loadTwo();
+        dropOnGroup('2', 1);
+        await waitFor(() =>
+            expect(plotData().map((t) => t.visible)).toEqual([true, false]),
+        );
+        expect(plotData()).toHaveLength(2);
+    });
+
+    it('Ctrl を押しながらドロップするとコピーが末尾に増える', async () => {
+        await loadTwo();
+        dropOnGroup('2', 1, true);
+        await waitFor(() => expect(plotData()).toHaveLength(3));
+        expect(plotData()[2].y).toEqual([0.1, 0.2]);
+        expect(plotData()[2].visible).toBe(false); // グループ 2 に入るので今は非表示
+        expect(plotData()[1].visible).toBe(true); // 元はグループ 1 に残る
     });
 });

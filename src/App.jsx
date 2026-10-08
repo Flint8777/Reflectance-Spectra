@@ -32,6 +32,7 @@ import {
     ZoomResetIcon,
 } from './components/icons.jsx';
 import { PRESET_LABELS, palette } from './constants.js';
+import { useEntryField } from './hooks/useEntryField.js';
 import { useUpdater } from './hooks/useUpdater.js';
 import {
     findYatX,
@@ -62,17 +63,27 @@ const createPlotlyComponent =
 const Plotly = PlotlyDefault?.default ?? PlotlyDefault;
 const Plot = createPlotlyComponent(Plotly);
 
+// entry のトレース線色だけを差し替えた新しい entry を返す
+const withTraceColor = (entry, color) => ({
+    ...entry,
+    trace: { ...entry.trace, line: { ...entry.trace.line, color } },
+});
+
 export default function App() {
-    const [traces, setTraces] = useState([]);
-    const [filesInfo, setFilesInfo] = useState([]);
-    const [visibility, setVisibility] = useState([]);
+    // トレースと、それに対応するファイル名・表示・所属グループを 1 要素にまとめて持つ。
+    // 以前は 4 本の並列配列を別々に更新していたので、更新漏れで長さや順序がずれる恐れがあった。
+    // 読み出し側は従来どおり並列配列で扱えるよう、フィールドごとの配列を派生させる。
+    const [entries, setEntries] = useState([]);
+    const traces = useEntryField(entries, 'trace');
+    const filesInfo = useEntryField(entries, 'file');
+    const visibility = useEntryField(entries, 'visible');
+    const traceGroupIds = useEntryField(entries, 'groupId');
     // 簡易グループ機能: グループ配列と各トレースの所属(groupId)、現在表示グループ
     const [groups, setGroups] = useState([
         { id: '1', name: 'Group 1' },
         { id: '2', name: 'Group 2' },
     ]);
     const [activeGroupId, setActiveGroupId] = useState('1');
-    const [traceGroupIds, setTraceGroupIds] = useState([]);
     // グループの表示状態トグル（Show/Hide）
     const [groupToggleState, setGroupToggleState] = useState({
         1: 'show',
@@ -706,10 +717,15 @@ export default function App() {
                               })
                             : sortedTraces;
 
-                    setTraces((prev) => [...prev, ...finalTraces]);
-                    setFilesInfo((prev) => [...prev, ...sortedInfos]);
-                    setVisibility((prev) => [...prev, ...sortedVisibility]);
-                    setTraceGroupIds((prev) => [...prev, ...sortedGroupIds]);
+                    setEntries((prev) => [
+                        ...prev,
+                        ...finalTraces.map((trace, i) => ({
+                            trace,
+                            file: sortedInfos[i],
+                            visible: sortedVisibility[i],
+                            groupId: sortedGroupIds[i],
+                        })),
+                    ]);
 
                     // ヘッダー処理: 変換した場合は wavenumber → Wavelength (μm) 相当に置換
                     if (!lockedLabels) {
@@ -851,20 +867,17 @@ export default function App() {
     );
 
     const toggleVisibility = useCallback((idx) => {
-        setVisibility((prev) => {
-            const next = [...prev];
-            next[idx] = !next[idx];
-            return next;
-        });
+        setEntries((prev) =>
+            prev.map((e, i) => (i === idx ? { ...e, visible: !e.visible } : e)),
+        );
     }, []);
 
     // 指定インデックス群の可視性を一括設定
     const setVisibilityForIndices = useCallback((indices, visible) => {
-        setVisibility((prev) => {
-            const next = [...prev];
-            for (const i of indices) next[i] = visible;
-            return next;
-        });
+        const targets = new Set(indices);
+        setEntries((prev) =>
+            prev.map((e, i) => (targets.has(i) ? { ...e, visible } : e)),
+        );
     }, []);
 
     // 指定インデックス群を一括 unload（Undo 付き）。グループヘッダの × ボタン用
@@ -872,23 +885,15 @@ export default function App() {
         (indices, displayLabel) => {
             if (!indices.length) return;
             const sorted = [...indices].sort((a, b) => a - b);
-            const members = sorted.map((idx) => ({
-                trace: traces[idx],
-                info: filesInfo[idx],
-                visible: visibility[idx],
-                groupId: traceGroupIds[idx],
-                idx,
-            }));
+            const members = sorted.map((idx) => ({ entry: entries[idx], idx }));
             const colorCounters = { ...groupColorCountersRef.current };
             const toRemove = new Set(sorted);
-            setTraces((prev) => prev.filter((_, i) => !toRemove.has(i)));
-            setFilesInfo((prev) => prev.filter((_, i) => !toRemove.has(i)));
-            setVisibility((prev) => prev.filter((_, i) => !toRemove.has(i)));
-            setTraceGroupIds((prev) => prev.filter((_, i) => !toRemove.has(i)));
-            const insertAll = (arr, getValue) => {
+            setEntries((prev) => prev.filter((_, i) => !toRemove.has(i)));
+            // 小さい index から順に元の位置へ差し戻す
+            const insertAll = (arr) => {
                 const next = [...arr];
                 for (const m of members)
-                    next.splice(Math.min(m.idx, next.length), 0, getValue(m));
+                    next.splice(Math.min(m.idx, next.length), 0, m.entry);
                 return next;
             };
             setNotice({
@@ -896,19 +901,14 @@ export default function App() {
                 message: `Unloaded "${displayLabel}" (${members.length} traces)`,
                 actionLabel: 'Undo',
                 actionFn: () => {
-                    setTraces((prev) => insertAll(prev, (m) => m.trace));
-                    setFilesInfo((prev) => insertAll(prev, (m) => m.info));
-                    setVisibility((prev) => insertAll(prev, (m) => m.visible));
-                    setTraceGroupIds((prev) =>
-                        insertAll(prev, (m) => m.groupId),
-                    );
+                    setEntries((prev) => insertAll(prev));
                     groupColorCountersRef.current = colorCounters;
                     setNotice(null);
                 },
                 id: Date.now(),
             });
         },
-        [traces, filesInfo, visibility, traceGroupIds],
+        [entries],
     );
 
     const toggleFileExpanded = useCallback((fname) => {
@@ -927,10 +927,7 @@ export default function App() {
             confirmLabel: 'Unload',
             danger: true,
             onConfirm: () => {
-                setTraces([]);
-                setFilesInfo([]);
-                setVisibility([]);
-                setTraceGroupIds([]);
+                setEntries([]);
                 setXRange(null);
                 setYRange(null);
                 setRelabMeta({});
@@ -954,7 +951,7 @@ export default function App() {
         setPlotIsZoomed(false);
     }, [getPlotEl]);
 
-    // 凡例のドラッグ＆ドロップ並び替え: 全並列配列を同じ順で並べ替え、custom モードへ自動切替
+    // 凡例のドラッグ＆ドロップ並び替え: entries を並べ替え、custom モードへ自動切替
     const reorderLegendItem = useCallback((fromIdx, toIdx, position) => {
         if (fromIdx === toIdx) return;
         const move = (arr) => {
@@ -967,10 +964,7 @@ export default function App() {
             next.splice(insertIdx, 0, item);
             return next;
         };
-        setTraces((prev) => move(prev));
-        setFilesInfo((prev) => move(prev));
-        setVisibility((prev) => move(prev));
-        setTraceGroupIds((prev) => move(prev));
+        setEntries((prev) => move(prev));
         setLegendSortKey('custom');
     }, []);
 
@@ -1033,20 +1027,15 @@ export default function App() {
     );
 
     const changeColor = useCallback((idx) => {
-        setTraces((prev) => {
+        setEntries((prev) => {
             const input = document.createElement('input');
             input.type = 'color';
-            input.value = prev[idx]?.line?.color || '#000000';
+            input.value = prev[idx]?.trace?.line?.color || '#000000';
             input.onchange = (e) => {
                 const c = e.target.value;
-                setTraces((p) => {
-                    const next = [...p];
-                    next[idx] = {
-                        ...next[idx],
-                        line: { ...next[idx].line, color: c },
-                    };
-                    return next;
-                });
+                setEntries((p) =>
+                    p.map((en, i) => (i === idx ? withTraceColor(en, c) : en)),
+                );
             };
             input.click();
             return prev;
@@ -1055,16 +1044,13 @@ export default function App() {
 
     // カラーサイクル上の次の色へ遷移（palette 外の色からは palette[0] へ）
     const cycleColor = useCallback((idx) => {
-        setTraces((prev) => {
-            const cur = prev[idx]?.line?.color;
+        setEntries((prev) => {
+            const cur = prev[idx]?.trace?.line?.color;
             const curIdx = palette.indexOf(cur);
             const nextIdx = curIdx === -1 ? 0 : (curIdx + 1) % palette.length;
-            const next = [...prev];
-            next[idx] = {
-                ...next[idx],
-                line: { ...next[idx].line, color: palette[nextIdx] },
-            };
-            return next;
+            return prev.map((en, i) =>
+                i === idx ? withTraceColor(en, palette[nextIdx]) : en,
+            );
         });
     }, []);
 
@@ -1854,11 +1840,16 @@ export default function App() {
                                             prev[g.id] === 'show'
                                                 ? 'hide'
                                                 : 'show';
-                                        setVisibility((vPrev) =>
-                                            vPrev.map((v, i) =>
+                                        setEntries((ePrev) =>
+                                            ePrev.map((en, i) =>
                                                 traceGroupIds[i] === g.id
-                                                    ? nextState === 'show'
-                                                    : v,
+                                                    ? {
+                                                          ...en,
+                                                          visible:
+                                                              nextState ===
+                                                              'show',
+                                                      }
+                                                    : en,
                                             ),
                                         );
                                         return { ...prev, [g.id]: nextState };
@@ -1898,18 +1889,14 @@ export default function App() {
                                             },
                                             name: filesInfo[idx],
                                         };
-                                        setTraces((prev) => [...prev, cloned]);
-                                        setFilesInfo((prev) => [
+                                        setEntries((prev) => [
                                             ...prev,
-                                            filesInfo[idx],
-                                        ]);
-                                        setVisibility((prev) => [
-                                            ...prev,
-                                            true,
-                                        ]);
-                                        setTraceGroupIds((prev) => [
-                                            ...prev,
-                                            g.id,
+                                            {
+                                                trace: cloned,
+                                                file: filesInfo[idx],
+                                                visible: true,
+                                                groupId: g.id,
+                                            },
                                         ]);
                                     } else {
                                         // 移動: 同一グループへのドロップは no-op
@@ -1925,22 +1912,19 @@ export default function App() {
                                             palette[
                                                 targetColorIdx % palette.length
                                             ];
-                                        setTraces((prev) => {
-                                            const next = [...prev];
-                                            next[idx] = {
-                                                ...next[idx],
-                                                line: {
-                                                    ...next[idx].line,
-                                                    color: newColor,
-                                                },
-                                            };
-                                            return next;
-                                        });
-                                        setTraceGroupIds((prev) => {
-                                            const next = [...prev];
-                                            next[idx] = g.id;
-                                            return next;
-                                        });
+                                        setEntries((prev) =>
+                                            prev.map((en, i) =>
+                                                i === idx
+                                                    ? {
+                                                          ...withTraceColor(
+                                                              en,
+                                                              newColor,
+                                                          ),
+                                                          groupId: g.id,
+                                                      }
+                                                    : en,
+                                            ),
+                                        );
                                     }
                                 }}
                             >
@@ -2654,7 +2638,7 @@ export default function App() {
                                     n > 0
                                         ? `This group and its ${n} loaded ${n === 1 ? 'spectrum' : 'spectra'} will be unloaded from the viewer.\nSpectra also shown in other groups will remain.`
                                         : 'This group will be removed.';
-                                // 削除対象インデックス（クロージャで固定）を先に算出して全並列配列に一貫して適用
+                                // 残すインデックス（クロージャで固定）を先に算出して entries に適用
                                 const keptIndices = traceGroupIds
                                     .map((gid, i) => (gid !== id ? i : -1))
                                     .filter((i) => i >= 0);
@@ -2664,16 +2648,7 @@ export default function App() {
                                     confirmLabel: 'Close',
                                     danger: true,
                                     onConfirm: () => {
-                                        setTraces((prev) =>
-                                            keptIndices.map((i) => prev[i]),
-                                        );
-                                        setFilesInfo((prev) =>
-                                            keptIndices.map((i) => prev[i]),
-                                        );
-                                        setVisibility((prev) =>
-                                            keptIndices.map((i) => prev[i]),
-                                        );
-                                        setTraceGroupIds((prev) =>
+                                        setEntries((prev) =>
                                             keptIndices.map((i) => prev[i]),
                                         );
                                         setGroups((prev) => {
