@@ -9,7 +9,23 @@ allowBuilds:
 # plist> と限定しているのは、0.9 系を使う別の依存を 0.8 系へ引き戻さないため。
 overrides:
   # ajv が期待する 3 系に留める（4 系へ上げると API が変わる）
-  fast-uri: '^3.1.6'
+  # 3.1.8 未満は GHSA-qw65-cvwx-89v3 / GHSA-58mr-gqgx-xq4g / GHSA-hrr3-gc8f-f4qj
+  fast-uri: '^3.1.8'
+  # 以下は親の範囲内に修正版があるのに pnpm update では動かないので、脆弱な版だけを
+  # 同じメジャーの修正版へ寄せる（7.x / 8.x の undici など他系列は巻き込まない）
+  # node-gyp 経由（GHSA-3wwx-pv8p-q78v / GHSA-rfgv-xxqx-mfg5 / GHSA-r53p-7pc4-xj5r）
+  'undici@>=6 <6.28.1': '^6.28.1'
+  # minimatch 経由の 3 系列（GHSA-q2hr-2g5m-vwhr / GHSA-qhr7-859c-m2p7 / GHSA-6j4f-fj2g-mc7p）
+  'brace-expansion@<1.1.21': '^1.1.21'
+  'brace-expansion@>=2 <2.1.7': '^2.1.7'
+  'brace-expansion@>=4 <5.0.12': '^5.0.12'
+  # electron-builder > got 経由（GHSA-ch52-4w7c-c8xp）
+  'http-cache-semantics@<4.2.1': '^4.3.0'
+  # plotly.js 本体経由で import はされない（GHSA-gjj5-9665-rwrc）
+  'probe-image-size@<7.4.0': '^7.4.0'
+  # concurrently 10.0.5 が 1.9.0 に固定していて修正版に届かない（GHSA-pqg4-j6r4-53mv）。
+  # 使うのは dev スクリプトの起動だけで、1.x 内の minor なので API は変わらない
+  'concurrently>shell-quote': '^1.12.0'
   # 0.8 系と 0.9 系で API が違うので、親の版ごとに同じ系列の修正版へ寄せる
   'plist@3.1.0>@xmldom/xmldom': '^0.8.15'
   'plist@3.1.1>@xmldom/xmldom': '^0.9.12'
