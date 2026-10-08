@@ -9,39 +9,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - pnpm の設定（`allowBuilds` / `overrides`）は `pnpm-workspace.yaml` に置く
 - 初回セットアップ: `corepack enable`（pnpm 未導入時）→ `pnpm install`
 
-## コマンド
-
-```bash
-# 開発（Vite devサーバー + Electron 同時起動）
-pnpm run dev
-
-# Vite devサーバーのみ（ブラウザ確認用）
-pnpm exec vite
-
-# Viteビルドのみ
-pnpm run build
-
-# ビルド＋配布パッケージ作成
-pnpm run electron:build:win   # Windows NSIS インストーラ（*_win_setup.exe）+ win-unpacked
-pnpm run electron:build:mac   # macOS DMG + ZIP
-pnpm run electron:build:all   # 両プラットフォーム
-
-# 従来の portable ZIP の作成（win-unpacked から。ビルド後に実行、PowerShell 必須）
-pnpm run pack:zip
-
-# テスト（ウォッチモード）
-pnpm test
-
-# テスト（1回実行）
-pnpm run test:run
-
-# Lint（Biome、CI でも実行）
-pnpm run lint
-
-# 特定のテストファイルのみ実行
-pnpm exec vitest run src/__tests__/App.test.jsx
-```
-
 ## アーキテクチャ
 
 **Electron + React + Vite** によるデスクトップアプリ。反射スペクトル・時系列データの表示が目的。
@@ -110,15 +77,6 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 
 **色の割当は Promise.all 完了後、ファイル名昇順で実施**（各ファイルの読み込み時点では色未設定）。CSV ヘッダーに `wavenumber` が含まれる場合、確認ダイアログで `λ = 10000 / ν` 変換を提案。DPT は常に wavelength (μm) なので変換対象外。
 
-### 共通ヘルパー
-
-- `PRESET_LABELS`（`src/constants.js`）— プリセット名→軸ラベルのマップ定数。新しいプリセット追加時はここに定義する
-- `loadFile(file, { presetSelected, unitOverride, relabMeta })`（`src/lib/fileLoaders.js`）— 1 ファイルを読んでトレースの素データにする。OPUS の WN/MI 重複排除・raw チャンネル非表示は `selectOpusSpectra`
-- `parseAndAddFiles(files, unitOverride)` — `loadFile` の結果を集め、色の割当・並べ替え・wavenumber 変換の確認・ヘッダー候補の判定を行って `entries` に追加
-- `classifyAndAddFiles(files)` — ファイル入力/ドロップ共通。wavelength-reflectanceプリセット時にnm/μm単位選択ダイアログを出すかの分岐を担当
-- `parseWhitespaceSeparated(text)`（`src/lib/textParsers.js`）— `.asc` とフォールバックパーサーの共通実装
-- 規格化ヘルパー（`src/lib/normalization.js`、テスト対象）: `findYatX` / `normalizeByMax` / `normalizeByMaxInRange` / `scaleToUnit` / `scaleToUnitInRange` / `normalizeAtX`。`src/__tests__/normalization.test.js` 参照
-
 ### OPUS バイナリパーサ (`src/opusParser.js`)
 
 brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuffer(ab)` で `{spectra: [{key, label, x, y, dxu, seriesIndex?, srt?, timeRelative?, ...}]}` を返す。
@@ -129,14 +87,6 @@ brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuff
 - **較正済 vs 未較正**: ratioed (key='r','a','t' 等) は較正済、`key.endsWith('sm'|'rf')` は raw 単一チャンネル。Series ファイルでは raw をデフォルト非表示 (`newVisibility=false`)
 - **拡張子検出**: OPUS は数字拡張子 (`.0`, `.0001`) または `.opus`。`/^\d+$/.test(ext)` で分岐、マジックバイト `\n\n\xfe\xfe` で再検証
 - **DPT 検証**: 純正 OPUS の DPT エクスポートと点単位比較で max |Δy| ~5×10⁻¹¹ (Float32 精度) を達成すれば移植正しい
-
-### Plotly統合
-
-`react-plotly.js` + `scattergl`（WebGL）で高速描画。ズーム状態は `xRange`/`yRange` ステートで管理。
-
-### プリセットダイアログ
-
-初回起動時にプリセット選択ダイアログが表示される（`showPresetDialog: true`）。`wavelength-reflectance` / `xrd` / `temperature` / `auto` の4種。
 
 ### Windows 配布と自動アップデート
 
@@ -168,29 +118,15 @@ Windows の正規配布は **NSIS インストーラ版**（`Reflectance-Spectra
 
 ### CI/CD
 
-`.github/workflows/` に5つのワークフローがある：`ci.yml`（lint+テスト+ビルド）、`release.yml`（リリースビルド＋リリースノート自動生成）、`pr-build-check.yml`（PRビルド検証、`pnpm-lock.yaml` / `pnpm-workspace.yaml` の変更でも起動）、`verify-artifacts.yml`（成果物検証）、`osv-scanner-scheduled.yml`（毎日 + push/main の脆弱性スキャン、`osv-scanner scan source -r .`）。いずれも `pnpm/action-setup` + `pnpm install --frozen-lockfile`。PR 向けの OSV スキャンは無い
-
 リリース手順：`vX.Y.Z` タグを作成してpushするだけ。タグのバージョンがビルド時に `package.json` へ注入される。
 
 - **ローカル `pnpm run electron:build:win` はタグ注入を経ない**ため package.json の version（コミット上 `2.3.1` 固定）がそのまま EXE ラベルになる。正しい版の配布物は必ずタグ push → `release.yml` で生成する（手元の検証 EXE はラベルが古くても中身は最新）
 
-**Dependabot / OSV 運用**:
-- OSV-Scanner は dev/推移依存の脆弱性でも `exit 1` で CI を落とす。ローカルでは `pnpm audit`（実行時依存だけなら `pnpm audit --prod`）で同等の確認ができる
-- 推移依存の更新は `pnpm update <pkg> --depth 99` が基本だが、**親の range 内に修正版があっても lockfile が動かないことがある**。その場合や、親が修正版に届かない範囲を pin している場合（例: plotly.js → maplibre-gl、concurrently → shell-quote）は `pnpm-workspace.yaml` の `overrides` で下限を上げ、理由と GHSA をコメントで残す。他の系列を巻き込まないよう `'undici@>=6 <6.28.1'` のような版範囲付きキーや `'concurrently>shell-quote'` のような親限定キーを使う
-- このリポジトリは GitHub auto-merge 無効。Dependabot PR は CI green 確認後 `gh pr merge <n> --squash --delete-branch` で手動マージ。lockfile を触る PR は1件マージ毎に残りが CONFLICTING になるので `@dependabot rebase` コメントで順次リベースして解決する（conflict が出た PR は Dependabot が自分でリベースすることも多い）
-- Dependabot alerts + security updates は有効。CVE 公開時に修正PRが自動生成され、main 側を先に直すと重複 PR は自動クローズされる
-- committed の `pnpm-lock.yaml` は LF。`.gitattributes` は未設定なので、Windows で lockfile が CRLF に全行書き換わった churn diff が出たら、コミット前に `sed -i 's/\r$//' pnpm-lock.yaml` で LF に戻す（Git Bash の `git cat-file -p HEAD:pnpm-lock.yaml | grep -c $'\r'` で blob が 0 CRLF と確認できる）
-- PR には OSV スキャンが付かないので、依存を触る PR はマージ前にローカルで `pnpm audit` を通し、マージ後の main で scheduled スキャン（push/main でも走る）が green になることを確認する
-
-**install スクリプトの許可（pnpm `allowBuilds`）**:
-- pnpm は依存の `preinstall`/`install`/`postinstall` を既定で実行せず、`pnpm-workspace.yaml` の `allowBuilds` で許可したものだけ実行する。現状は `electron`(postinstall でバイナリDL=**必須**)・`electron-winstaller`（electron-builder の依存。Squirrel ターゲットは使っていない）・`esbuild` を許可、`es5-ext`(感謝メッセージのみ) は `false` で明示拒否
-- 新しい依存が install スクリプトを持つと `pnpm install` が未承認として警告するので、要否を判断して `allowBuilds` に追記する（`electron` を外すと Electron バイナリが落ちず dev/build が壊れる）
-- `pnpm install` は lockfile をサプライチェーンポリシーで検証する（CI ログの "Lockfile passes supply-chain policies"）
-
 ### Claude Code スキル
 
 - `/release <version>` — README更新 → タグ作成 → push。mainブランチ上でのみ使用。**注意**: スキルは README を main へ直接コミットする手順だが本リポジトリは main 直接禁止 → `docs/readme-vX.Y.Z` ブランチで PR 作成 → マージしてからタグ push する
-- `/parse-test <ext>` — 新しいファイルパーサーのテストをTDDで生成
+- `release-testing` — リリース前の検証項目（Playwright 検証パターン・目視必須項目・CI 担保範囲）
+- `dependency-maintenance` — Dependabot / OSV-Scanner 運用、install スクリプト（pnpm `allowBuilds`）の扱い
 
 ### テスト
 
@@ -223,44 +159,3 @@ Plotly モックは描画に渡された最新の `{ data, layout }` を `global
 - Playwright MCP のファイルアップロードは `.playwright-mcp/fixtures/` 配下に置く（プロジェクトルート内必須）
 - Vite v8 (Rolldown) は CJS の `__esModule: true` を unwrap せず `import X from 'cjs-pkg'` が `{ default: fn, __esModule: true }` を返すことがある → `X?.default ?? X` で吸収（App.jsx の Plot / Plotly import が該当）。症状は React の "Element type is invalid: ... got: object"
 - 大型依存更新（plotly / vite / electron のメジャー bump）後に optimizer 由来の interop 不具合が出たら `rm -rf node_modules/.vite` でキャッシュをクリアしてから `pnpm run dev`
-- Git Bash (Windows) で `gh ... --jq '.a+"/"+.b'` の `/` が MSYS パス変換され出力が壊れる（`OPENC:/Program Files/Git/DIRTY`）→ 区切りは `join(" , ")` を使う
-
-### リリース前テスト項目
-
-**テスト層**:
-- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 10 ファイル / 146 件）、`pnpm run build`
-- **Playwright MCP**: `pnpm run dev` → `http://localhost:5173` に対し `mcp__playwright__*` で UI 操作 → DOM/Plotly 状態を検証
-- **Electron 実機**: `pnpm run electron:build:win` で生成したパッケージで最終確認
-
-**Playwright で検証できる項目**（検証パターン例あり）:
-| 項目 | 検証方法 |
-|---|---|
-| 初期フロー | Preset 選択 → file_upload → 単位ダイアログ Apply → `plot.data.length` 確認 |
-| 規格化 (wavelength/max/minmax) | 値比較 + `plot._fullLayout.yaxis.range` / `xaxis.range` 検査 |
-| Reset Zoom 遷移 | `Plotly.relayout(plot, {...})` 後に `button.disabled` が false |
-| スタック | トグル後 `yaxis.showticklabels === false` / slider 変更で data.y が即時更新 |
-| NoticeBanner | 範囲外波長で規格化 → `.notice-warning` の存在、Wavenumber CSV で `.confirm-dialog` 表示 |
-| Undo トースト | Unload → `.notice-action` が出る → クリックで trace 復元 |
-| ヘッダー抑制 | 同一ヘッダー CSV を 2 回読み込み → 2 回目は `HeaderSelectDialog` 出ない |
-| 同一ファイル再 upload | Unload All → 同じファイル再 upload で `plot.data.length > 0` |
-| グループ操作 | 右クリックで context menu、外部クリックで閉じる |
-| 凡例 D&D 並び替え | `DataTransfer` を使った drag event シミュレーション |
-| 座標表示単位 | mouseover 後の DOM テキストが ` μm` を含む |
-
-**Playwright 運用メモ**:
-- ファイルアップロードは `.playwright-mcp/fixtures/` 配下の fixture を使う
-- Plotly 内部状態は `document.querySelector('.js-plotly-plot').data` / `._fullLayout` で読める
-- `Plotly.relayout()` はプログラマティック実行では `onRelayout` prop が発火しないことがあるので、直接購読した state (`plotIsZoomed`) を使うべき
-
-**目視必須（Playwright 困難）**:
-- プロットの視覚的妥当性（線の形・色分布）
-- Plotly のマウスホイールズーム、ドラッグ選択ズームの滑らかさ
-- カラーピッカーダイアログ（OS ネイティブ）
-- インストーラ版 Electron ウィンドウ挙動（メニューバー非表示、タイトル、自動アップデート）
-- 範囲選択ズーム直後の Auto-fit Y / Reset Zoom ボタンの enable 切替視覚フィードバック
-
-**CI が自動担保**:
-- `.github/workflows/ci.yml`: push/PR で lint + test:run + build
-- `.github/workflows/release.yml`: タグ push で electron:build:win/mac
-- `.github/workflows/pr-build-check.yml`: PR のビルド検証
-- `.github/workflows/verify-artifacts.yml`: 成果物検証

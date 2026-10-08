@@ -42,3 +42,6 @@ out/
 
 # Playwright MCP artifacts
 .playwright-mcp/
+
+# Claude Code のローカル権限設定（個人用・共有しない）
+.claude/settings.local.json
