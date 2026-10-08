@@ -4,37 +4,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 環境
 
-- Node.js v22 で開発・検証済み
-- 初回セットアップ: `npm install`
+- Node.js v22 で開発・検証済み（CI も node 22）
+- パッケージマネージャは **pnpm 11**（`package.json` の `packageManager: pnpm@11.x` で固定、Node 22.5+ 必須）。npm / `package-lock.json` は使わない
+- pnpm の設定（`allowBuilds` / `overrides`）は `pnpm-workspace.yaml` に置く
+- 初回セットアップ: `corepack enable`（pnpm 未導入時）→ `pnpm install`
 
 ## コマンド
 
 ```bash
 # 開発（Vite devサーバー + Electron 同時起動）
-npm run dev
+pnpm run dev
 
 # Vite devサーバーのみ（ブラウザ確認用）
-npx vite
+pnpm exec vite
 
 # Viteビルドのみ
-npm run build
+pnpm run build
 
 # ビルド＋配布パッケージ作成
-npm run electron:build:win   # Windows portable
-npm run electron:build:mac   # macOS DMG + ZIP
-npm run electron:build:all   # 両プラットフォーム
+pnpm run electron:build:win   # Windows portable
+pnpm run electron:build:mac   # macOS DMG + ZIP
+pnpm run electron:build:all   # 両プラットフォーム
 
 # Windows portable ZIPの作成（ビルド後に実行）
-npm run pack:zip
+pnpm run pack:zip
 
 # テスト（ウォッチモード）
-npm test
+pnpm test
 
 # テスト（1回実行）
-npm run test:run
+pnpm run test:run
+
+# Lint（Biome、CI でも実行）
+pnpm run lint
 
 # 特定のテストファイルのみ実行
-npx vitest run src/__tests__/App.test.jsx
+pnpm exec vitest run src/__tests__/App.test.jsx
 ```
 
 ## アーキテクチャ
@@ -141,24 +146,24 @@ brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuff
 
 ### CI/CD
 
-`.github/workflows/` に6つのワークフローがある：`ci.yml`（テスト+ビルド）、`release.yml`（リリースビルド＋リリースノート自動生成）、`pr-build-check.yml`（PRビルド検証）、`verify-artifacts.yml`（成果物検証）、`osv-scanner-pr.yml`（PR脆弱性スキャン）、`osv-scanner-scheduled.yml`（毎日 + push/main の脆弱性スキャン）。
+`.github/workflows/` に5つのワークフローがある：`ci.yml`（lint+テスト+ビルド）、`release.yml`（リリースビルド＋リリースノート自動生成）、`pr-build-check.yml`（PRビルド検証、`pnpm-lock.yaml` / `pnpm-workspace.yaml` の変更でも起動）、`verify-artifacts.yml`（成果物検証）、`osv-scanner-scheduled.yml`（毎日 + push/main の脆弱性スキャン、`osv-scanner scan source -r .`）。いずれも `pnpm/action-setup` + `pnpm install --frozen-lockfile`。PR 向けの OSV スキャンは無い
 
 リリース手順：`vX.Y.Z` タグを作成してpushするだけ。タグのバージョンがビルド時に `package.json` へ注入される。
 
-- **ローカル `npm run electron:build:win` はタグ注入を経ない**ため package.json の version（コミット上 `2.3.1` 固定）がそのまま EXE ラベルになる。正しい版の配布物は必ずタグ push → `release.yml` で生成する（手元の検証 EXE はラベルが古くても中身は最新）
+- **ローカル `pnpm run electron:build:win` はタグ注入を経ない**ため package.json の version（コミット上 `2.3.1` 固定）がそのまま EXE ラベルになる。正しい版の配布物は必ずタグ push → `release.yml` で生成する（手元の検証 EXE はラベルが古くても中身は最新）
 
 **Dependabot / OSV 運用**:
-- OSV-Scanner は dev/推移依存の脆弱性でも `exit 1` で CI を落とす。`package.json` の range 内なら `npm update <pkg>` で lockfile のみ更新して解消できる（例: axios←wait-on, tmp←tmp-promise）
-- このリポジトリは GitHub auto-merge 無効。Dependabot PR は CI green 確認後 `gh pr merge <n> --squash --delete-branch` で手動マージ。lockfile を触る PR は1件マージ毎に残りが CONFLICTING になるので `@dependabot rebase` コメントで順次リベースして解決する
+- OSV-Scanner は dev/推移依存の脆弱性でも `exit 1` で CI を落とす。ローカルでは `pnpm audit`（実行時依存だけなら `pnpm audit --prod`）で同等の確認ができる
+- 推移依存の更新は `pnpm update <pkg> --depth 99` が基本だが、**親の range 内に修正版があっても lockfile が動かないことがある**。その場合や、親が修正版に届かない範囲を pin している場合（例: plotly.js → maplibre-gl、concurrently → shell-quote）は `pnpm-workspace.yaml` の `overrides` で下限を上げ、理由と GHSA をコメントで残す。他の系列を巻き込まないよう `'undici@>=6 <6.28.1'` のような版範囲付きキーや `'concurrently>shell-quote'` のような親限定キーを使う
+- このリポジトリは GitHub auto-merge 無効。Dependabot PR は CI green 確認後 `gh pr merge <n> --squash --delete-branch` で手動マージ。lockfile を触る PR は1件マージ毎に残りが CONFLICTING になるので `@dependabot rebase` コメントで順次リベースして解決する（conflict が出た PR は Dependabot が自分でリベースすることも多い）
 - Dependabot alerts + security updates は有効。CVE 公開時に修正PRが自動生成され、main 側を先に直すと重複 PR は自動クローズされる
-- **Windows で `npm update` すると lockfile が LF→CRLF に全行書き換わり**、9000行超の churn diff になる（committed 版は LF）。コミット前に `sed -i 's/\r$//' package-lock.json` で LF に戻すとバージョン更新分のみのクリーン差分になる。`.gitattributes` 未設定が根因（Git Bash の `git cat-file -p HEAD:package-lock.json | grep -c $'\r'` で blob は 0 CRLF と確認できる）
-- OSV の PR スキャンは scheduled より新しい advisory を拾う（live OSV データ）。scheduled が落ちて直しても、PR 作成時に新規脆弱性（例: undici）が追加検出されることがあるので PR の `scan` チェックまで確認する
+- committed の `pnpm-lock.yaml` は LF。`.gitattributes` は未設定なので、Windows で lockfile が CRLF に全行書き換わった churn diff が出たら、コミット前に `sed -i 's/\r$//' pnpm-lock.yaml` で LF に戻す（Git Bash の `git cat-file -p HEAD:pnpm-lock.yaml | grep -c $'\r'` で blob が 0 CRLF と確認できる）
+- PR には OSV スキャンが付かないので、依存を触る PR はマージ前にローカルで `pnpm audit` を通し、マージ後の main で scheduled スキャン（push/main でも走る）が green になることを確認する
 
-**npm v12 (2026年7月予定) の install スクリプト既定 off 対応**:
-- v12 で `npm install` が `preinstall`/`install`/`postinstall` を既定で実行しなくなる。本プロジェクトで install スクリプトを持つのは `electron`(postinstall でバイナリDL=**必須**)・`electron-winstaller`(win target は portable のみで Squirrel 未使用=不要)・`es5-ext`(感謝メッセージのみ=不要)・`fsevents`(mac 限定 optional native=不要)。git/remote 依存はゼロなので `--allow-git`/`--allow-remote` 変更は無影響
-- 対策として `package.json` に `"allowScripts": { "electron": true }` を追加済み。name-only(`true`) にしているのは Dependabot の electron bump 毎にバージョン pin の再承認で CI ビルドが無音で壊れるのを避けるため。npm 10.x は未知フィールドとして無視するので現状の install は無変更
-- npm 11.16.0+ では `npm approve-scripts --allow-scripts-pending` で未承認スクリプトを一覧でき、`allowScripts` を自動生成できる（現環境は npm 10.9.4 のため手書き）。CI は node 20(npm 10) のため当面は警告すら出ない。node/npm を 11.16+ に上げる際に再確認する
-- 依存監査: install スクリプト持ちは `package-lock.json` を `"hasInstallScript": true` で grep（現状 electron/electron-winstaller/es5-ext/fsevents）。git/remote 依存の有無は `"resolved": "git`/非 registry URL を grep（現状ゼロ）で確認できる
+**install スクリプトの許可（pnpm `allowBuilds`）**:
+- pnpm は依存の `preinstall`/`install`/`postinstall` を既定で実行せず、`pnpm-workspace.yaml` の `allowBuilds` で許可したものだけ実行する。現状は `electron`(postinstall でバイナリDL=**必須**)・`electron-winstaller`・`esbuild` を許可、`es5-ext`(感謝メッセージのみ) は `false` で明示拒否
+- 新しい依存が install スクリプトを持つと `pnpm install` が未承認として警告するので、要否を判断して `allowBuilds` に追記する（`electron` を外すと Electron バイナリが落ちず dev/build が壊れる）
+- `pnpm install` は lockfile をサプライチェーンポリシーで検証する（CI ログの "Lockfile passes supply-chain policies"）
 
 ### Claude Code スキル
 
@@ -188,19 +193,19 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 ### 落とし穴
 
 - ファイル input の同じファイル再選択で `onChange` が発火しない。`onClick={e => e.target.value = ''}` で毎回 reset
-- `electron/main.cjs` の変更は HMR 対象外。反映に `taskkill //F //IM electron.exe` → `npm run dev` 再実行
+- `electron/main.cjs` の変更は HMR 対象外。反映に `taskkill //F //IM electron.exe` → `pnpm run dev` 再実行
 - Plotly のグラフ div は `getPlotEl()` = `plotRef.current?.el ?? plotRef.current` で取得（**react-plotly.js v4 で ref がグラフ div を直接指す**ようになった。v2 は instance.el。直アクセスすると crosshair/座標表示/ズーム検知が全滅）。ズーム状態は onRelayout prop だと漏れるので `getPlotEl().on('plotly_relayout')` で直接購読
 - Playwright MCP のファイルアップロードは `.playwright-mcp/fixtures/` 配下に置く（プロジェクトルート内必須）
 - Vite v8 (Rolldown) は CJS の `__esModule: true` を unwrap せず `import X from 'cjs-pkg'` が `{ default: fn, __esModule: true }` を返すことがある → `X?.default ?? X` で吸収（App.jsx の Plot / Plotly import が該当）。症状は React の "Element type is invalid: ... got: object"
-- 大型依存更新（plotly / vite / electron のメジャー bump）後に optimizer 由来の interop 不具合が出たら `rm -rf node_modules/.vite` でキャッシュをクリアしてから `npm run dev`
+- 大型依存更新（plotly / vite / electron のメジャー bump）後に optimizer 由来の interop 不具合が出たら `rm -rf node_modules/.vite` でキャッシュをクリアしてから `pnpm run dev`
 - Git Bash (Windows) で `gh ... --jq '.a+"/"+.b'` の `/` が MSYS パス変換され出力が壊れる（`OPENC:/Program Files/Git/DIRTY`）→ 区切りは `join(" , ")` を使う
 
 ### リリース前テスト項目
 
 **テスト層**:
-- **自動 (CI/ローカル)**: `npm run test:run`（unit + integration、現在 31 件）、`npm run build`
-- **Playwright MCP**: `npm run dev` → `http://localhost:5173` に対し `mcp__playwright__*` で UI 操作 → DOM/Plotly 状態を検証
-- **Electron 実機**: `npm run electron:build:win` で生成したパッケージで最終確認
+- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 7 ファイル / 119 件）、`pnpm run build`
+- **Playwright MCP**: `pnpm run dev` → `http://localhost:5173` に対し `mcp__playwright__*` で UI 操作 → DOM/Plotly 状態を検証
+- **Electron 実機**: `pnpm run electron:build:win` で生成したパッケージで最終確認
 
 **Playwright で検証できる項目**（検証パターン例あり）:
 | 項目 | 検証方法 |
@@ -230,7 +235,7 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 - 範囲選択ズーム直後の Auto-fit Y / Reset Zoom ボタンの enable 切替視覚フィードバック
 
 **CI が自動担保**:
-- `.github/workflows/ci.yml`: push/PR で test:run + build
+- `.github/workflows/ci.yml`: push/PR で lint + test:run + build
 - `.github/workflows/release.yml`: タグ push で electron:build:win/mac
 - `.github/workflows/pr-build-check.yml`: PR のビルド検証
 - `.github/workflows/verify-artifacts.yml`: 成果物検証
