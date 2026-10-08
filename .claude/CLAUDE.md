@@ -55,6 +55,7 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 - `src/lib/textParsers.js` — テキスト形式のパーサ（`parseDPT` / `parseWhitespaceSeparated` / `isRelabTabFile` / `extractRelabMeta` / `parseRelabTab`）
 - `src/components/icons.jsx` — `IconButton` と SVG アイコン
 - `src/components/dialogs.jsx` — `ConfirmDialog` / `NoticeBanner` / 各種設定ダイアログ / `UpdateDialog` と `cleanIpcErrorMessage`
+- `src/hooks/useUpdater.js` — アップデート関連のステート・起動 3 秒後の自動チェック・進捗/エラー購読・ダイアログ開閉
 - `electron/main.cjs` — Electronメインプロセス。`package.json` が `"type": "module"` のため `.cjs` 拡張子でCommonJSを使用。`package.json` からバージョンを読み込んでウィンドウタイトルに反映。開発時は `http://localhost:5173`、本番時は `dist/index.html` を読み込む。IPCハンドラー・自動アップデート・CSP設定を含む。
 - `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `onUpdateError` / `takePendingFiles` / `onOpenFiles` / `getPlatform` / `quitApp` を提供。
 - `vite.config.js` — `base: './'` を設定することで、Electronが `file://` プロトコル経由でビルド成果物を読み込めるようにしている。
@@ -80,7 +81,7 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 - `seenHeaders` — 選択/却下したヘッダー組を記憶し再問合せ抑制
 - `groupColorCountersRef` — グループ別カラーサイクル counter（useEffect で空グループ分を自動削除）
 
-アップデート関連のステート：
+アップデート関連のステート（`useUpdater` フック内）：
 - `updateStatus` — `'idle'|'checking'|'available'|'downloading'|'downloaded'|'no-update'|'error'`
 - `updateInfo` — `{ hasUpdate, currentVersion, latestVersion, releaseUrl, installKind }`（`installKind` は `'installer'|'portable'`）
 
@@ -192,6 +193,8 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 - `HTMLCanvasElement.getContext`
 - `URL.createObjectURL`
 
+Plotly モックは描画に渡された最新の `{ data, layout }` を `globalThis.__plotProps` に残すので、結合テスト（`fileLoading.test.jsx`）はそこからトレースの中身・並び・`visible` を検証する。内部配列の並びはファイル名の**降順**、色はファイル名の昇順に割り当てる点に注意
+
 **バイナリパーサのテスト** (`opusParser.test.js`): 実 OPUS ファイル fixture は使わず、`buildOpusFile([{type, bytes}])` ヘルパーで `DataView` 経由の合成バイト列を構築する。`buildParamBlock` / `buildDataBlock` / `buildSeriesBlock` で各種ブロックを最小構成で生成し、エッジケース（WN/MI 重複、Compact、Series）を網羅。実機検証は `scripts/verify-opus.mjs` / `compare-dpt.mjs` で別途行う（コミット対象外の調査用スクリプト）
 
 ### UX 規約
@@ -217,7 +220,7 @@ Vitest + jsdom を使用。`src/__tests__/setup.js` で以下をモック：
 ### リリース前テスト項目
 
 **テスト層**:
-- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 7 ファイル / 119 件）、`pnpm run build`
+- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 8 ファイル / 125 件）、`pnpm run build`
 - **Playwright MCP**: `pnpm run dev` → `http://localhost:5173` に対し `mcp__playwright__*` で UI 操作 → DOM/Plotly 状態を検証
 - **Electron 実機**: `pnpm run electron:build:win` で生成したパッケージで最終確認
 
