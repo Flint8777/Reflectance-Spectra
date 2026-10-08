@@ -22,11 +22,11 @@ pnpm exec vite
 pnpm run build
 
 # ビルド＋配布パッケージ作成
-pnpm run electron:build:win   # Windows portable
+pnpm run electron:build:win   # Windows NSIS インストーラ（*_win_setup.exe）+ win-unpacked
 pnpm run electron:build:mac   # macOS DMG + ZIP
 pnpm run electron:build:all   # 両プラットフォーム
 
-# Windows portable ZIPの作成（ビルド後に実行）
+# 従来の portable ZIP の作成（win-unpacked から。ビルド後に実行、PowerShell 必須）
 pnpm run pack:zip
 
 # テスト（ウォッチモード）
@@ -50,7 +50,7 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 
 - `src/App.jsx` — Reactアプリ全体が単一の大きなコンポーネント（約1220行）。パース処理・状態管理・UI描画がすべてここに集約されている。
 - `electron/main.cjs` — Electronメインプロセス。`package.json` が `"type": "module"` のため `.cjs` 拡張子でCommonJSを使用。`package.json` からバージョンを読み込んでウィンドウタイトルに反映。開発時は `http://localhost:5173`、本番時は `dist/index.html` を読み込む。IPCハンドラー・自動アップデート・CSP設定を含む。
-- `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `getPlatform` を提供。
+- `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `onUpdateError` / `takePendingFiles` / `onOpenFiles` / `getPlatform` / `quitApp` を提供。
 - `vite.config.js` — `base: './'` を設定することで、Electronが `file://` プロトコル経由でビルド成果物を読み込めるようにしている。
 - `vitest.config.js` — `jsdom` 環境を使用。セットアップファイルは `src/__tests__/setup.js`。
 
@@ -75,8 +75,8 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 - `groupColorCountersRef` — グループ別カラーサイクル counter（useEffect で空グループ分を自動削除）
 
 アップデート関連のステート：
-- `updateStatus` — `'idle'|'checking'|'available'|'downloading'|'no-update'|'error'`
-- `updateInfo` — `{ hasUpdate, currentVersion, latestVersion, releaseUrl }`
+- `updateStatus` — `'idle'|'checking'|'available'|'downloading'|'downloaded'|'no-update'|'error'`
+- `updateInfo` — `{ hasUpdate, currentVersion, latestVersion, releaseUrl, installKind }`（`installKind` は `'installer'|'portable'`）
 
 ### ファイルパース（`parseAndAddFiles`）
 
@@ -124,24 +124,32 @@ brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuff
 
 初回起動時にプリセット選択ダイアログが表示される（`showPresetDialog: true`）。`wavelength-reflectance` / `xrd` / `temperature` / `auto` の4種。
 
-### 自動アップデート
+### Windows 配布と自動アップデート
 
-`window.electronAPI`（`preload.cjs` 経由）でGitHub Releasesと通信し、Windows portable ZIPのダウンロード・展開・再起動を行う。Webブラウザ環境では非表示。
+Windows の正規配布は **NSIS インストーラ版**（`Reflectance-Spectra-Viewer-vX.Y.Z_win_setup.exe`）。`package.json` の `build.win.target` は `dir` + `nsis`、`build.nsis` は per-user（`perMachine: false`）・インストール先変更可・ショートカット選択ページ付き（`build/installer.nsh`）。リリースには互換用に従来の portable ZIP（`*_win.zip`）も添付している。
 
-> **注意**: アップデートスクリプトでは `Wait-Process -Id <pid>` 後に `taskkill /F /IM "*.exe" /T` を実行する。ElectronはGPU・レンダラー等の子プロセスを起動するため、メインPIDの終了待機だけではファイルロックが残り上書きコピーが失敗する。
+更新は `window.electronAPI`（`preload.cjs` 経由）から行い、Webブラウザ環境では非表示。`check-update` / `download-apply-update` の挙動は実行形態で分かれる（判定は `isInstallerBuild()` = exe と同じフォルダに `Uninstall Reflectance Spectra Viewer.exe` があるか）:
 
-> **インストール場所**: このアプリはportable版のため `C:\Program Files\` への配置は不可（書き込み権限なしでアップデートが失敗する）。正しい配置先は `C:\Users\<user>\AppData\Local\ReflectanceSpectraViewer\`。
+| 形態 | 更新確認 | 適用 |
+|---|---|---|
+| インストーラ版 | `electron-updater` の `checkForUpdates()`（リリースの `latest.yml`） | `downloadUpdate()` → `quitAndInstall(true, true)` でサイレント更新・再起動 |
+| portable 版（旧 ZIP） | GitHub API（`RELEASES_URL`） | `*_win_setup.exe` を TEMP に落として起動し、自分は終了＝**インストーラ版へ移行**。`installer.nsh` が `%LOCALAPPDATA%\ReflectanceSpectraViewer` の旧コピーを削除。残ったインストーラは次回起動時に `cleanupDownloadedInstallers()` が片付ける |
+| macOS | GitHub API | `*_mac.dmg` を Downloads に落として Finder で開くまで（未署名のため Squirrel.Mac は使えない。置き換えは利用者が行う） |
 
-> **userData のパス**: Electron の userData は `%APPDATA%\reflectance-spectra-viewer\`（小文字ハイフン、`package.json` の `name` に由来）。インストール先 `ReflectanceSpectraViewer` と命名が異なるので、完全リセット時は両方を削除する必要がある。
+> **electron-updater の設定**: `autoDownload` / `autoInstallOnAppQuit` は false（更新ボタンを押してから落とす）、差分ダウンロードと Web インストーラは無効。未署名だが `publisherName` 未設定なので署名検証はスキップされる。`quitAndInstall` は失敗しても例外を投げないので、`autoUpdater.on('error')` で renderer に `update-error` を送って UI が「ダウンロード中」で固まらないようにしている。
 
-> **自動更新の下限バージョン**: v2.5.0 未満のアプリは updater スクリプト自体にバグがあり（子プロセスロック / スペース入りパスでの無音コピー失敗）、GUI の更新ボタンからは v2.5.0+ へ上げられない。旧版ユーザーには ZIP を手動展開して v2.5.0+ を導入してもらう必要がある。
+> **リリース成果物の整合性**: `release.yml` は `latest.yml` が生成されていること、その `url` がビルドした `*_win_setup.exe` 名と一致することを検査する。ずれると electron-updater の更新が 404 になる。インストーラのファイル名（`build.nsis.artifactName`）を変えるときは `cleanupDownloadedInstallers()` と portable 版のアセット検索（`_win_setup.exe` で終わる名前）も合わせる。
 
-> **アップデートスクリプトのデバッグ**: コピー失敗は無音で起きやすい。`Copy-Item -Path "$src\*"` はスペース含むパスで不安定なため `Get-ChildItem -LiteralPath $src | Copy-Item` を使うこと（v2.5.0で修正済み）。
+> **インストール場所**: 既定は per-user の `%LOCALAPPDATA%\Programs\Reflectance Spectra Viewer\`（管理者権限不要）。インストーラは旧 portable 版の配置先 `%LOCALAPPDATA%\ReflectanceSpectraViewer\` を、インストール先が別のときだけ削除する。
+
+> **userData / ログのパス**: Electron の userData は `%APPDATA%\reflectance-spectra-viewer\`（小文字ハイフン、`package.json` の `name` に由来）。更新の診断ログは同フォルダの `updater.log`（GUI プロセスの console は捨てられるので、「更新を押しても何も起きない」はまずここを見る）。完全リセット時はインストール先のアンインストールに加えて userData も削除する。
+
+> **旧 portable 版（v2.5.0 未満）**: 旧 updater スクリプトにバグがあり（子プロセスのファイルロック / スペース入りパスでの無音コピー失敗）、GUI の更新ボタンからは上げられない。インストーラを手動で実行してもらう。
 
 ### main.cjs のモジュールレベル定数
 
 - `currentVersion` — 起動時に `package.json` から1回だけ読み込み。IPC ハンドラや `createWindow` で共有
-- `cachedRelease` — `check-update` で取得したGitHub Release情報をキャッシュし、`download-apply-update` で再利用
+- `cachedRelease` — portable 版 / macOS の `check-update` で取得したGitHub Release情報をキャッシュし、`download-apply-update` で再利用（インストーラ版は electron-updater が自前で持つ）
 - `RELEASES_URL` / `httpOptions(url)` — GitHub API URL定数とHTTPリクエストオプション共通ヘルパー
 
 ### CI/CD
@@ -161,7 +169,7 @@ brukeropus (Python, MIT) を JS 移植。`File.arrayBuffer()` → `parseOpusBuff
 - PR には OSV スキャンが付かないので、依存を触る PR はマージ前にローカルで `pnpm audit` を通し、マージ後の main で scheduled スキャン（push/main でも走る）が green になることを確認する
 
 **install スクリプトの許可（pnpm `allowBuilds`）**:
-- pnpm は依存の `preinstall`/`install`/`postinstall` を既定で実行せず、`pnpm-workspace.yaml` の `allowBuilds` で許可したものだけ実行する。現状は `electron`(postinstall でバイナリDL=**必須**)・`electron-winstaller`・`esbuild` を許可、`es5-ext`(感謝メッセージのみ) は `false` で明示拒否
+- pnpm は依存の `preinstall`/`install`/`postinstall` を既定で実行せず、`pnpm-workspace.yaml` の `allowBuilds` で許可したものだけ実行する。現状は `electron`(postinstall でバイナリDL=**必須**)・`electron-winstaller`（electron-builder の依存。Squirrel ターゲットは使っていない）・`esbuild` を許可、`es5-ext`(感謝メッセージのみ) は `false` で明示拒否
 - 新しい依存が install スクリプトを持つと `pnpm install` が未承認として警告するので、要否を判断して `allowBuilds` に追記する（`electron` を外すと Electron バイナリが落ちず dev/build が壊れる）
 - `pnpm install` は lockfile をサプライチェーンポリシーで検証する（CI ログの "Lockfile passes supply-chain policies"）
 
