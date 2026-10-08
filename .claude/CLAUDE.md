@@ -217,6 +217,7 @@ Plotly モックは描画に渡された最新の `{ data, layout }` を `global
 ### 落とし穴
 
 - ファイル input の同じファイル再選択で `onChange` が発火しない。`onClick={e => e.target.value = ''}` で毎回 reset
+- カラーピッカー（`<input type="color">` の `click()`）などユーザー操作が必要な API は、イベントハンドラの中で直接呼ぶ。`setState` の更新関数の中で呼ぶと、React が描画時まで実行を遅らせたときに "A user gesture is required" で開かない（jsdom では再現しないのでテストでは捕まらない）
 - `electron/main.cjs` の変更は HMR 対象外。反映に `taskkill //F //IM electron.exe` → `pnpm run dev` 再実行
 - Plotly のグラフ div は `getPlotEl()` = `plotRef.current?.el ?? plotRef.current` で取得（**react-plotly.js v4 で ref がグラフ div を直接指す**ようになった。v2 は instance.el。直アクセスすると crosshair/座標表示/ズーム検知が全滅）。ズーム状態は onRelayout prop だと漏れるので `getPlotEl().on('plotly_relayout')` で直接購読
 - Playwright MCP のファイルアップロードは `.playwright-mcp/fixtures/` 配下に置く（プロジェクトルート内必須）

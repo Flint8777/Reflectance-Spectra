@@ -599,11 +599,14 @@ export default function App() {
         [applyInlineRange],
     );
 
-    const changeColor = useCallback((idx) => {
-        setEntries((prev) => {
+    // カラーピッカーはユーザー操作（ダブルクリック）の処理中でしか開けない。
+    // state の更新関数の中で click() すると、React が描画時まで実行を遅らせたときに
+    // "A user gesture is required" で開かなくなるので、ここで直接開く。
+    const changeColor = useCallback(
+        (idx) => {
             const input = document.createElement('input');
             input.type = 'color';
-            input.value = prev[idx]?.trace?.line?.color || '#000000';
+            input.value = traces[idx]?.line?.color || '#000000';
             input.onchange = (e) => {
                 const c = e.target.value;
                 setEntries((p) =>
@@ -611,9 +614,9 @@ export default function App() {
                 );
             };
             input.click();
-            return prev;
-        });
-    }, []);
+        },
+        [traces],
+    );
 
     // カラーサイクル上の次の色へ遷移（palette 外の色からは palette[0] へ）
     const cycleColor = useCallback((idx) => {
