@@ -52,6 +52,7 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 - `src/constants.js` — `palette`（トレース色）と `PRESET_LABELS`
 - `src/lib/normalization.js` — 規格化・スケーリングの純粋関数
 - `src/lib/plotLayout.js` — `minorDtick` / `pickLegendPlacement`（凡例配置）/ `buildExportFigure`（エクスポート用フィギュア）
+- `src/lib/fileLoaders.js` — 1 ファイル → トレース素データの変換（形式判定・OPUS の絞り込み・単位換算）
 - `src/lib/textParsers.js` — テキスト形式のパーサ（`parseDPT` / `parseWhitespaceSeparated` / `isRelabTabFile` / `extractRelabMeta` / `parseRelabTab`）
 - `src/components/icons.jsx` — `IconButton` と SVG アイコン
 - `src/components/dialogs.jsx` — `ConfirmDialog` / `NoticeBanner` / 各種設定ダイアログ / `UpdateDialog` と `cleanIpcErrorMessage`
@@ -90,9 +91,9 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 - `updateStatus` — `'idle'|'checking'|'available'|'downloading'|'downloaded'|'no-update'|'error'`
 - `updateInfo` — `{ hasUpdate, currentVersion, latestVersion, releaseUrl, installKind }`（`installKind` は `'installer'|'portable'`）
 
-### ファイルパース（`parseAndAddFiles`）
+### ファイルパース（`src/lib/fileLoaders.js` + `parseAndAddFiles`）
 
-すべて `FileReader` によるクライアントサイド処理。拡張子と内容でフォーマットを判定：
+すべて `FileReader` によるクライアントサイド処理。形式ごとの変換は `src/lib/fileLoaders.js` の純粋関数（`loadFile` → `loadOpusBuffer` / `loadTextFile`）が担い、`{ items: [{ x, y, name, header, visible }], labels?, relabMeta? }` を返す。軸ラベル更新・RELAB メタ保存などの副作用は App の `parseAndAddFiles` が戻り値を見て行う（読み込み・解析で例外が出たファイルは空の結果＝「読めなかったファイル」として通知）。拡張子と内容でフォーマットを判定：
 
 | 拡張子 | パーサー |
 |--------|----------|
@@ -107,12 +108,13 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 
 単位変換：プリセットが `wavelength-reflectance` かつユニットダイアログでユーザーが "nm" を選択した場合、x値を1000で除算してμmに変換。OPUS は DXU 値（WN/MI/LGW）で単位が一意に決まるためダイアログをスキップ。
 
-**色の割当は Promise.all 完了後、ファイル名昇順で実施**（`addTrace` 内では色未設定）。CSV ヘッダーに `wavenumber` が含まれる場合、確認ダイアログで `λ = 10000 / ν` 変換を提案。DPT は常に wavelength (μm) なので変換対象外。
+**色の割当は Promise.all 完了後、ファイル名昇順で実施**（各ファイルの読み込み時点では色未設定）。CSV ヘッダーに `wavenumber` が含まれる場合、確認ダイアログで `λ = 10000 / ν` 変換を提案。DPT は常に wavelength (μm) なので変換対象外。
 
 ### 共通ヘルパー
 
 - `PRESET_LABELS`（`src/constants.js`）— プリセット名→軸ラベルのマップ定数。新しいプリセット追加時はここに定義する
-- `addTrace(x, y, file, header)` — `parseAndAddFiles` 内のヘルパー。トレース作成・カラー割り当て・グループ追加を一括処理
+- `loadFile(file, { presetSelected, unitOverride, relabMeta })`（`src/lib/fileLoaders.js`）— 1 ファイルを読んでトレースの素データにする。OPUS の WN/MI 重複排除・raw チャンネル非表示は `selectOpusSpectra`
+- `parseAndAddFiles(files, unitOverride)` — `loadFile` の結果を集め、色の割当・並べ替え・wavenumber 変換の確認・ヘッダー候補の判定を行って `entries` に追加
 - `classifyAndAddFiles(files)` — ファイル入力/ドロップ共通。wavelength-reflectanceプリセット時にnm/μm単位選択ダイアログを出すかの分岐を担当
 - `parseWhitespaceSeparated(text)`（`src/lib/textParsers.js`）— `.asc` とフォールバックパーサーの共通実装
 - 規格化ヘルパー（`src/lib/normalization.js`、テスト対象）: `findYatX` / `normalizeByMax` / `normalizeByMaxInRange` / `scaleToUnit` / `scaleToUnitInRange` / `normalizeAtX`。`src/__tests__/normalization.test.js` 参照
@@ -225,7 +227,7 @@ Plotly モックは描画に渡された最新の `{ data, layout }` を `global
 ### リリース前テスト項目
 
 **テスト層**:
-- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 9 ファイル / 131 件）、`pnpm run build`
+- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 10 ファイル / 146 件）、`pnpm run build`
 - **Playwright MCP**: `pnpm run dev` → `http://localhost:5173` に対し `mcp__playwright__*` で UI 操作 → DOM/Plotly 状態を検証
 - **Electron 実機**: `pnpm run electron:build:win` で生成したパッケージで最終確認
 

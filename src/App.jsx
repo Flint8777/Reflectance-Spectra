@@ -1,4 +1,3 @@
-import Papa from 'papaparse';
 import PlotlyDefault from 'plotly.js-dist-min';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import createPlotlyComponentDefault from 'react-plotly.js/factory';
@@ -34,6 +33,7 @@ import {
 import { PRESET_LABELS, palette } from './constants.js';
 import { useEntryField } from './hooks/useEntryField.js';
 import { useUpdater } from './hooks/useUpdater.js';
+import { loadFile } from './lib/fileLoaders.js';
 import {
     findYatX,
     normalizeAtX,
@@ -46,14 +46,6 @@ import {
     minorDtick,
     pickLegendPlacement,
 } from './lib/plotLayout.js';
-import {
-    extractRelabMeta,
-    isRelabTabFile,
-    parseDPT,
-    parseRelabTab,
-    parseWhitespaceSeparated,
-} from './lib/textParsers.js';
-import { isOpusMagic, parseOpusBuffer } from './opusParser.js';
 
 // Vite v8 (Rolldown) が CJS の `__esModule: true` を unwrap せず default 経由で
 // `{ default: fn }` を返すため、`.default` フォールバックで実体を取り出す。
@@ -204,459 +196,40 @@ export default function App() {
             const detectedHeaders = [];
             const newVisibility = []; // 既定 true。OPUS Series で raw を隠す等の用途で個別指定
 
-            // パース完了は非同期順なのでここでは色を割り当てず、後でファイル名昇順に確定する
-            const addTrace = (x, y, file, header) => {
-                newTraces.push({
-                    x,
-                    y,
-                    type: 'scattergl',
-                    mode: 'lines',
-                    line: { width: 1.5 },
-                    name: file.name,
+            // 形式ごとの読み込みは lib/fileLoaders.js。ここでは結果を集めて副作用だけを反映する。
+            // 読み込み完了は非同期順なのでここでは色を割り当てず、後でファイル名昇順に確定する
+            const tasks = files.map(async (file) => {
+                const result = await loadFile(file, {
+                    presetSelected,
+                    unitOverride,
+                    relabMeta,
                 });
-                newInfos.push(file.name);
-                newGroupIds.push(activeGroupId);
-                detectedHeaders.push(header);
-                newVisibility.push(true);
-            };
-
-            const tasks = files.map(
-                (file) =>
-                    new Promise((resolve) => {
-                        const lname = file.name.toLowerCase();
-                        const ext = lname.split('.').pop();
-
-                        // OPUS バイナリ (.0 / .0001 / .opus 等) は ArrayBuffer 経路で処理
-                        if (/^\d+$/.test(ext) || ext === 'opus') {
-                            const binReader = new FileReader();
-                            binReader.onload = () => {
-                                const ab = binReader.result;
-                                if (!isOpusMagic(ab)) {
-                                    resolve();
-                                    return;
-                                }
-                                const result = parseOpusBuffer(ab);
-                                if (!result?.spectra.length) {
-                                    resolve();
-                                    return;
-                                }
-                                let spectra = result.spectra;
-                                if (
-                                    presetSelected === 'wavelength-reflectance'
-                                ) {
-                                    // 波長軸のスペクトルだけに絞る（PNT/LGW 等の Trace 軸は除外）
-                                    spectra = spectra.filter(
-                                        (sp) =>
-                                            sp.dxu === 'WN' || sp.dxu === 'MI',
-                                    );
-                                    // OPUS は同一物理スペクトルを WN/MI 両方で保存することがあるので MI を優先
-                                    // Series の場合は seriesIndex ごとに別物として dedup する
-                                    const byKey = new Map();
-                                    for (const sp of spectra) {
-                                        const idxPart =
-                                            sp.seriesIndex !== undefined
-                                                ? `#${sp.seriesIndex}`
-                                                : '';
-                                        const k = sp.key + idxPart;
-                                        if (!byKey.has(k)) byKey.set(k, []);
-                                        byKey.get(k).push(sp);
-                                    }
-                                    const filtered = [];
-                                    for (const list of byKey.values()) {
-                                        const miOnes = list.filter(
-                                            (s) => s.dxu === 'MI',
-                                        );
-                                        if (
-                                            miOnes.length &&
-                                            list.some((s) => s.dxu === 'WN')
-                                        )
-                                            filtered.push(...miOnes);
-                                        else filtered.push(...list);
-                                    }
-                                    spectra = filtered;
-                                }
-                                // Series ファイルかつ較正済 (ratioed) が存在する場合、raw な単一チャンネル
-                                // (Sample 'sm' / Reference 'rf') をデフォルト非表示にする
-                                const isRawChannel = (sp) =>
-                                    sp.key.endsWith('sm') ||
-                                    sp.key.endsWith('rf');
-                                const hasSeries = spectra.some(
-                                    (sp) => sp.seriesIndex !== undefined,
-                                );
-                                const hasCalibrated = spectra.some(
-                                    (sp) => !isRawChannel(sp),
-                                );
-                                const hideRawByDefault =
-                                    hasSeries && hasCalibrated;
-                                for (const sp of spectra) {
-                                    let x = sp.x;
-                                    // OPUS の DXU=WN（cm⁻¹）→ wavelength-reflectance プリセット時のみ μm に変換
-                                    if (
-                                        presetSelected ===
-                                            'wavelength-reflectance' &&
-                                        sp.dxu === 'WN'
-                                    ) {
-                                        x = x.map((v) =>
-                                            Number.isFinite(v) && v !== 0
-                                                ? 10000 / v
-                                                : NaN,
-                                        );
-                                    }
-                                    // 表示名: Series なら #N インデックス、複数スペクトルならラベル付き
-                                    // 手動マイクロ FT-IR では位置情報が記録されないため、時刻ではなく順序番号を採用
-                                    const labelWithIdx =
-                                        sp.seriesIndex !== undefined
-                                            ? `${sp.label} #${sp.seriesIndex + 1}`
-                                            : sp.label;
-                                    const displayName =
-                                        spectra.length > 1
-                                            ? `${file.name} [${labelWithIdx}]`
-                                            : file.name;
-                                    newTraces.push({
-                                        x,
-                                        y: Array.from(sp.y),
-                                        type: 'scattergl',
-                                        mode: 'lines',
-                                        line: { width: 1.5 },
-                                        name: displayName,
-                                    });
-                                    newInfos.push(file.name);
-                                    newGroupIds.push(activeGroupId);
-                                    detectedHeaders.push(
-                                        PRESET_LABELS['wavelength-reflectance'],
-                                    );
-                                    newVisibility.push(
-                                        !(hideRawByDefault && isRawChannel(sp)),
-                                    );
-                                }
-                                if (!lockedLabels) {
-                                    setXLabel(
-                                        PRESET_LABELS['wavelength-reflectance']
-                                            .x,
-                                    );
-                                    setYLabel(
-                                        PRESET_LABELS['wavelength-reflectance']
-                                            .y,
-                                    );
-                                }
-                                resolve();
-                            };
-                            binReader.onerror = () => resolve();
-                            binReader.readAsArrayBuffer(file);
-                            return;
-                        }
-
-                        const reader = new FileReader();
-                        reader.onload = () => {
-                            const text = String(reader.result);
-                            const lines = text.split(/\r?\n/);
-
-                            const isTimeTemp =
-                                lines.length > 1 &&
-                                lines[1]
-                                    .trim()
-                                    .includes(
-                                        'This document contains measurement data of the following devices:',
-                                    );
-                            if (isTimeTemp) {
-                                const headerIdx = lines.findIndex(
-                                    (l) =>
-                                        l.includes('No.') &&
-                                        l.includes('Date') &&
-                                        l.includes('Temperature'),
-                                );
-                                if (headerIdx === -1) {
-                                    resolve();
-                                    return;
-                                }
-                                const headerLine = lines[headerIdx];
-                                const headers = headerLine
-                                    .split('\t')
-                                    .map((h) => h.trim());
-                                const dataLines = lines
-                                    .slice(headerIdx + 2)
-                                    .filter((l) => l.trim());
-                                const xIdx = headers.findIndex(
-                                    (h) =>
-                                        h.includes('Sec.') &&
-                                        h.includes('00:00'),
-                                );
-                                const yIdx = headers.indexOf('Temperature');
-                                if (xIdx === -1 || yIdx === -1) {
-                                    resolve();
-                                    return;
-                                }
-                                const x = [];
-                                const y = [];
-                                for (const dl of dataLines) {
-                                    const cols = dl
-                                        .split('\t')
-                                        .map((c) => c.trim());
-                                    const xv = Number(cols[xIdx]);
-                                    const yv = Number(cols[yIdx]);
-                                    if (
-                                        Number.isFinite(xv) &&
-                                        Number.isFinite(yv)
-                                    ) {
-                                        x.push(xv);
-                                        y.push(yv);
-                                    }
-                                }
-                                if (x.length) {
-                                    const start = x[0];
-                                    for (let i = 0; i < x.length; i++)
-                                        x[i] -= start;
-                                }
-                                addTrace(
-                                    x,
-                                    y,
-                                    file,
-                                    PRESET_LABELS['time-temperature'],
-                                );
-                                if (!lockedLabels) {
-                                    setXLabel(
-                                        PRESET_LABELS['time-temperature'].x,
-                                    );
-                                    setYLabel(
-                                        PRESET_LABELS['time-temperature'].y,
-                                    );
-                                }
-                                resolve();
-                                return;
-                            }
-
-                            if (ext === 'csv') {
-                                const nonEmpty = lines.filter(Boolean);
-                                if (!nonEmpty.length) {
-                                    resolve();
-                                    return;
-                                }
-                                const firstParsed = Papa.parse(nonEmpty[0], {
-                                    header: false,
-                                }).data[0];
-                                let hasHeader = false;
-                                let headerX = null;
-                                let headerY = null;
-                                if (firstParsed && firstParsed.length >= 2) {
-                                    const v0 = Number(firstParsed[0]);
-                                    const v1 = Number(firstParsed[1]);
-                                    if (
-                                        !Number.isFinite(v0) ||
-                                        !Number.isFinite(v1)
-                                    ) {
-                                        hasHeader = true;
-                                        headerX = String(firstParsed[0]).trim();
-                                        headerY = String(firstParsed[1]).trim();
-                                    }
-                                }
-                                Papa.parse(text, {
-                                    header: hasHeader,
-                                    dynamicTyping: true,
-                                    skipEmptyLines: true,
-                                    complete: (res) => {
-                                        const x = [];
-                                        const y = [];
-                                        if (hasHeader && res.data.length) {
-                                            const fields = Object.keys(
-                                                res.data[0],
-                                            );
-                                            const xKey = fields[0];
-                                            const yKey = fields[1] || fields[0];
-                                            for (const row of res.data) {
-                                                const xv = Number(row[xKey]);
-                                                const yv = Number(row[yKey]);
-                                                if (
-                                                    Number.isFinite(xv) &&
-                                                    Number.isFinite(yv)
-                                                ) {
-                                                    x.push(xv);
-                                                    y.push(yv);
-                                                }
-                                            }
-                                        } else {
-                                            for (const row of res.data) {
-                                                if (!row || row.length < 2)
-                                                    continue;
-                                                const xv = Number(row[0]);
-                                                const yv = Number(row[1]);
-                                                if (
-                                                    Number.isFinite(xv) &&
-                                                    Number.isFinite(yv)
-                                                ) {
-                                                    x.push(xv);
-                                                    y.push(yv);
-                                                }
-                                            }
-                                        }
-                                        const xData =
-                                            presetSelected ===
-                                                'wavelength-reflectance' &&
-                                            unitOverride === 'nm'
-                                                ? x.map((v) => v / 1000)
-                                                : x;
-                                        addTrace(
-                                            xData,
-                                            y,
-                                            file,
-                                            hasHeader
-                                                ? {
-                                                      xLabel: headerX,
-                                                      yLabel: headerY,
-                                                  }
-                                                : null,
-                                        );
-                                        resolve();
-                                    },
-                                });
-                                return;
-                            }
-
-                            if (ext === 'xml') {
-                                try {
-                                    const meta = extractRelabMeta(text);
-                                    if (meta?.tabFileName)
-                                        setRelabMeta((prev) => ({
-                                            ...prev,
-                                            [meta.tabFileName.toLowerCase()]:
-                                                meta,
-                                        }));
-                                } catch {}
-                                resolve();
-                                return;
-                            }
-
-                            if (ext === 'tab') {
-                                const meta = relabMeta[lname];
-                                let x = [],
-                                    y = [];
-                                if (meta) {
-                                    try {
-                                        const p = parseRelabTab(text, meta);
-                                        x = p.x;
-                                        y = p.y;
-                                    } catch {
-                                        const fb = parseDPT(text);
-                                        x = fb.x;
-                                        y = fb.y;
-                                    }
-                                } else if (isRelabTabFile(text)) {
-                                    // ここで簡易パースを直接実装
-                                    const lines = text
-                                        .split(/\r?\n/)
-                                        .map((l) => l.trim());
-                                    const n = parseInt(lines[0], 10);
-                                    for (
-                                        let i = 1;
-                                        i <= n && i < lines.length;
-                                        ++i
-                                    ) {
-                                        const t = lines[i];
-                                        if (!t) continue;
-                                        const m = t.match(
-                                            /^\s*([-+]?\d+(?:\.\d+)?)\s+([-+]?\d+(?:\.\d+)?)(?:\s+[-+]?\d+(?:\.\d+)?)?\s*$/,
-                                        );
-                                        if (m) {
-                                            const xv = parseFloat(m[1]);
-                                            const yv = parseFloat(m[2]);
-                                            if (
-                                                Number.isFinite(xv) &&
-                                                Number.isFinite(yv)
-                                            ) {
-                                                x.push(xv);
-                                                y.push(yv);
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    const fb = parseDPT(text);
-                                    x = fb.x;
-                                    y = fb.y;
-                                }
-                                // ルール: RELAB TABはnm保存なのでμmへ変換（1/1000）。
-                                // 上記はXMLメタあり/なし双方に適用。
-                                if (x.length) x = x.map((v) => v / 1000);
-                                addTrace(
-                                    x,
-                                    y,
-                                    file,
-                                    PRESET_LABELS['wavelength-reflectance'],
-                                );
-                                if (!lockedLabels) {
-                                    setXLabel(
-                                        PRESET_LABELS['wavelength-reflectance']
-                                            .x,
-                                    );
-                                    setYLabel(
-                                        PRESET_LABELS['wavelength-reflectance']
-                                            .y,
-                                    );
-                                }
-                                resolve();
-                                return;
-                            }
-
-                            if (ext === 'dpt') {
-                                const { x, y } = parseDPT(text);
-                                if (!x.length) {
-                                    resolve();
-                                    return;
-                                }
-                                addTrace(
-                                    x,
-                                    y,
-                                    file,
-                                    PRESET_LABELS['wavelength-reflectance'],
-                                );
-                                if (!lockedLabels) {
-                                    setXLabel(
-                                        PRESET_LABELS['wavelength-reflectance']
-                                            .x,
-                                    );
-                                    setYLabel(
-                                        PRESET_LABELS['wavelength-reflectance']
-                                            .y,
-                                    );
-                                }
-                                resolve();
-                                return;
-                            }
-
-                            if (ext === 'asc') {
-                                const { x, y } = parseWhitespaceSeparated(text);
-                                if (!x.length) {
-                                    resolve();
-                                    return;
-                                }
-                                addTrace(
-                                    x,
-                                    y,
-                                    file,
-                                    PRESET_LABELS['spacing-intensity'],
-                                );
-                                if (!lockedLabels) {
-                                    setXLabel(
-                                        PRESET_LABELS['spacing-intensity'].x,
-                                    );
-                                    setYLabel(
-                                        PRESET_LABELS['spacing-intensity'].y,
-                                    );
-                                }
-                                resolve();
-                                return;
-                            }
-
-                            const { x, y } = parseWhitespaceSeparated(text);
-                            const xData =
-                                presetSelected === 'wavelength-reflectance' &&
-                                unitOverride === 'nm'
-                                    ? x.map((v) => v / 1000)
-                                    : x;
-                            addTrace(xData, y, file, null);
-                            resolve();
-                        };
-                        reader.readAsText(file);
-                    }),
-            );
+                if (result.relabMeta) {
+                    const meta = result.relabMeta;
+                    setRelabMeta((prev) => ({
+                        ...prev,
+                        [meta.tabFileName.toLowerCase()]: meta,
+                    }));
+                }
+                for (const item of result.items) {
+                    newTraces.push({
+                        x: item.x,
+                        y: item.y,
+                        type: 'scattergl',
+                        mode: 'lines',
+                        line: { width: 1.5 },
+                        name: item.name,
+                    });
+                    newInfos.push(file.name);
+                    newGroupIds.push(activeGroupId);
+                    detectedHeaders.push(item.header);
+                    newVisibility.push(item.visible);
+                }
+                if (result.labels && !lockedLabels) {
+                    setXLabel(result.labels.x);
+                    setYLabel(result.labels.y);
+                }
+            });
 
             Promise.all(tasks).then(() => {
                 // 1) ファイル名昇順に色を割り当て（グループ別カラーカウンタを進める）
