@@ -55,6 +55,7 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 - `src/lib/textParsers.js` — テキスト形式のパーサ（`parseDPT` / `parseWhitespaceSeparated` / `isRelabTabFile` / `extractRelabMeta` / `parseRelabTab`）
 - `src/components/icons.jsx` — `IconButton` と SVG アイコン
 - `src/components/dialogs.jsx` — `ConfirmDialog` / `NoticeBanner` / 各種設定ダイアログ / `UpdateDialog` と `cleanIpcErrorMessage`
+- `src/hooks/useEntryField.js` — `entries` からフィールド別の並列配列を派生（参照安定）
 - `src/hooks/useUpdater.js` — アップデート関連のステート・起動 3 秒後の自動チェック・進捗/エラー購読・ダイアログ開閉
 - `electron/main.cjs` — Electronメインプロセス。`package.json` が `"type": "module"` のため `.cjs` 拡張子でCommonJSを使用。`package.json` からバージョンを読み込んでウィンドウタイトルに反映。開発時は `http://localhost:5173`、本番時は `dist/index.html` を読み込む。IPCハンドラー・自動アップデート・CSP設定を含む。
 - `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `onUpdateError` / `takePendingFiles` / `onOpenFiles` / `getPlatform` / `quitApp` を提供。
@@ -63,12 +64,16 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 
 ### App.jsx の状態モデル
 
-インデックスで対応付けられた並列配列で管理：
+トレースは `entries` ステート 1 本で持つ（要素は `{ trace, file, visible, groupId }`）。**更新は必ず `setEntries` で 1 要素単位に行う**（以前の 4 本の並列配列を別々に更新する方式は、更新漏れで長さ・順序がずれる恐れがあったため廃止）。
+
+読み出し側は `useEntryField(entries, key)`（`src/hooks/useEntryField.js`）で派生させた並列配列を使う。中身が変わらなければ前回と同じ配列参照を返すので、表示切替で `traces` の参照が変わって規格化を再計算する、といったことは起きない：
 
 - `traces[]` — Plotlyトレースオブジェクト（`{x, y, type: 'scattergl', mode: 'lines', ...}`）
 - `filesInfo[]` — 対応するファイル名
 - `visibility[]` — トレースごとの表示/非表示フラグ
 - `traceGroupIds[]` — 各トレースが属するグループID
+
+並びはファイル名の降順（新規読み込み分を降順に並べて末尾へ追加）。色は `withTraceColor(entry, color)` で差し替える
 
 `groups[]` でトレースのセットをまとめて表示切替できる。`activeGroupId` が新規ファイルの追加先グループを決定する。
 
@@ -220,7 +225,7 @@ Plotly モックは描画に渡された最新の `{ data, layout }` を `global
 ### リリース前テスト項目
 
 **テスト層**:
-- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 8 ファイル / 125 件）、`pnpm run build`
+- **自動 (CI/ローカル)**: `pnpm run lint`、`pnpm run test:run`（unit + integration、現在 9 ファイル / 131 件）、`pnpm run build`
 - **Playwright MCP**: `pnpm run dev` → `http://localhost:5173` に対し `mcp__playwright__*` で UI 操作 → DOM/Plotly 状態を検証
 - **Electron 実機**: `pnpm run electron:build:win` で生成したパッケージで最終確認
 
