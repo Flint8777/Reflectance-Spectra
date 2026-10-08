@@ -8,6 +8,8 @@ vi.mock('react-plotly.js/factory', () => ({
     default:
         () =>
         ({ data, layout, ...props }) => {
+            // 描画に渡された最新の data / layout をテストから読めるようにしておく
+            globalThis.__plotProps = { data, layout };
             return React.createElement('div', {
                 'data-testid': 'plotly-mock',
                 ...props,
