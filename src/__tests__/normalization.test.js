@@ -6,7 +6,7 @@ import {
     normalizeByMaxInRange,
     scaleToUnit,
     scaleToUnitInRange,
-} from '../App.jsx';
+} from '../lib/normalization.js';
 
 describe('findYatX', () => {
     it('x が完全一致のとき対応する y を返す', () => {

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildExportFigure, minorDtick, pickLegendPlacement } from '../App.jsx';
+import {
+    buildExportFigure,
+    minorDtick,
+    pickLegendPlacement,
+} from '../lib/plotLayout.js';
 
 const traces = [
     { x: [1, 2], y: [3, 4], type: 'scattergl', mode: 'lines', name: 'a' },
