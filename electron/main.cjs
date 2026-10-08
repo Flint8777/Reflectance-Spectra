@@ -6,6 +6,7 @@ const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { autoUpdater } = require('electron-updater');
 const { filePathsFromArgv } = require('./argvFiles.cjs');
+const { isAllowedExternalUrl } = require('./externalUrl.cjs');
 const { OpenFileQueue } = require('./openFileQueue.cjs');
 
 // 開発環境かどうかの判定
@@ -74,11 +75,6 @@ const RELEASES_URL =
     'https://api.github.com/repos/Flint8777/Reflectance-Spectra/releases/latest';
 const REDIRECT_CODES = [301, 302, 307, 308];
 const MAX_REDIRECTS = 5;
-// shell.openExternal で開いてよい URL のホワイトリスト。
-// プレフィクス完全一致（先頭から）で評価する。
-const ALLOWED_EXTERNAL_PREFIXES = [
-    'https://github.com/Flint8777/Reflectance-Spectra',
-];
 
 // ---- ヘルパー関数 ----
 
@@ -277,11 +273,8 @@ ipcMain.handle('quit-app', () => {
 ipcMain.handle('take-pending-files', () => openFileQueue.take());
 
 ipcMain.handle('open-external', (_event, url) => {
-    // ALLOWED_EXTERNAL_PREFIXES に一致しない URL は拒否（file:// や cmd: の混入防御）
-    if (
-        typeof url !== 'string' ||
-        !ALLOWED_EXTERNAL_PREFIXES.some((p) => url.startsWith(p))
-    ) {
+    // 本リポジトリ配下の https URL 以外は拒否（file:// や cmd:、別リポジトリの混入防御）
+    if (!isAllowedExternalUrl(url)) {
         throw new Error('blocked: url not in allowlist');
     }
     return shell.openExternal(url);
