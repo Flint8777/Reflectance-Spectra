@@ -185,6 +185,36 @@ describe('色とグループ', () => {
         expect(plotData()[0].line.color).toBe('#ff7f0e'); // b.dpt は元のまま
     });
 
+    // jsdom ではユーザー操作の制約（user gesture）を再現できないので、開いたときの色と反映だけを見る
+    it('色見本のダブルクリックで今の色のカラーピッカーを開き、選んだ色を反映する', async () => {
+        await loadTwo();
+        let picker = null;
+        const origClick = HTMLInputElement.prototype.click;
+        HTMLInputElement.prototype.click = function () {
+            if (this.type === 'color') {
+                picker = this;
+                return;
+            }
+            return origClick.call(this);
+        };
+        try {
+            const swatch = screen.getAllByTitle(
+                'Click: next color · Double-click: custom color',
+            )[0]; // a.dpt
+            fireEvent.doubleClick(swatch);
+            expect(picker.value).toBe('#1f77b4');
+            picker.value = '#123456';
+            await act(async () => {
+                picker.onchange({ target: picker });
+            });
+            await waitFor(() =>
+                expect(plotData()[1].line.color).toBe('#123456'),
+            );
+        } finally {
+            HTMLInputElement.prototype.click = origClick;
+        }
+    });
+
     it('別グループへドロップすると移動し、今のグループでは非表示になる', async () => {
         await loadTwo();
         dropOnGroup('2', 1);
