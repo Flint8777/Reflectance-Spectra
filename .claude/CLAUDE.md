@@ -48,7 +48,13 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 
 ### 主要ファイル
 
-- `src/App.jsx` — Reactアプリ全体が単一の大きなコンポーネント（約1220行）。パース処理・状態管理・UI描画がすべてここに集約されている。
+- `src/App.jsx` — Reactアプリ本体の単一の大きなコンポーネント（約2750行）。ファイル読み込みの振り分け・状態管理・UI描画を持つ。純粋関数や部品は下記モジュールに分けてある
+- `src/constants.js` — `palette`（トレース色）と `PRESET_LABELS`
+- `src/lib/normalization.js` — 規格化・スケーリングの純粋関数
+- `src/lib/plotLayout.js` — `minorDtick` / `pickLegendPlacement`（凡例配置）/ `buildExportFigure`（エクスポート用フィギュア）
+- `src/lib/textParsers.js` — テキスト形式のパーサ（`parseDPT` / `parseWhitespaceSeparated` / `isRelabTabFile` / `extractRelabMeta` / `parseRelabTab`）
+- `src/components/icons.jsx` — `IconButton` と SVG アイコン
+- `src/components/dialogs.jsx` — `ConfirmDialog` / `NoticeBanner` / 各種設定ダイアログ / `UpdateDialog` と `cleanIpcErrorMessage`
 - `electron/main.cjs` — Electronメインプロセス。`package.json` が `"type": "module"` のため `.cjs` 拡張子でCommonJSを使用。`package.json` からバージョンを読み込んでウィンドウタイトルに反映。開発時は `http://localhost:5173`、本番時は `dist/index.html` を読み込む。IPCハンドラー・自動アップデート・CSP設定を含む。
 - `electron/preload.cjs` — ContextBridgeで `window.electronAPI` を公開。`checkForUpdate` / `downloadAndApplyUpdate` / `openExternal` / `onDownloadProgress` / `onUpdateError` / `takePendingFiles` / `onOpenFiles` / `getPlatform` / `quitApp` を提供。
 - `vite.config.js` — `base: './'` を設定することで、Electronが `file://` プロトコル経由でビルド成果物を読み込めるようにしている。
@@ -97,13 +103,13 @@ pnpm exec vitest run src/__tests__/App.test.jsx
 
 **色の割当は Promise.all 完了後、ファイル名昇順で実施**（`addTrace` 内では色未設定）。CSV ヘッダーに `wavenumber` が含まれる場合、確認ダイアログで `λ = 10000 / ν` 変換を提案。DPT は常に wavelength (μm) なので変換対象外。
 
-### App.jsx の共通ヘルパー
+### 共通ヘルパー
 
-- `PRESET_LABELS` — プリセット名→軸ラベルのマップ定数。新しいプリセット追加時はここに定義する
+- `PRESET_LABELS`（`src/constants.js`）— プリセット名→軸ラベルのマップ定数。新しいプリセット追加時はここに定義する
 - `addTrace(x, y, file, header)` — `parseAndAddFiles` 内のヘルパー。トレース作成・カラー割り当て・グループ追加を一括処理
 - `classifyAndAddFiles(files)` — ファイル入力/ドロップ共通。wavelength-reflectanceプリセット時にnm/μm単位選択ダイアログを出すかの分岐を担当
-- `parseWhitespaceSeparated(text)` — `.asc` とフォールバックパーサーの共通実装
-- エクスポート済み規格化ヘルパー（テスト対象）: `findYatX` / `normalizeByMax` / `normalizeByMaxInRange` / `scaleToUnit` / `scaleToUnitInRange` / `normalizeAtX`。`src/__tests__/normalization.test.js` 参照
+- `parseWhitespaceSeparated(text)`（`src/lib/textParsers.js`）— `.asc` とフォールバックパーサーの共通実装
+- 規格化ヘルパー（`src/lib/normalization.js`、テスト対象）: `findYatX` / `normalizeByMax` / `normalizeByMaxInRange` / `scaleToUnit` / `scaleToUnitInRange` / `normalizeAtX`。`src/__tests__/normalization.test.js` 参照
 
 ### OPUS バイナリパーサ (`src/opusParser.js`)
 
