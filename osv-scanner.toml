@@ -1,0 +1,8 @@
+# sprintf-js 1.1.3: 書式の精度指定子を巨大にすると DoS（修正版は未公開．#68）
+# 経路は electron-builder > app-builder-lib > @electron/get > global-agent > roarr > sprintf-js（optional）で，
+# パッケージ時に electron を落とすときのログ整形にしか使われず，配布物にも入らない．
+# 期限が来たら修正版が出ていないか確かめ，出ていれば overrides で上げてこの項目を消す
+[[IgnoredVulns]]
+id = "GHSA-hp3w-g68c-fv3c"
+ignoreUntil = 2027-01-15
+reason = "Dev-only transitive dep via electron-builder > app-builder-lib > @electron/get > global-agent > roarr; no fixed version yet (#68)"

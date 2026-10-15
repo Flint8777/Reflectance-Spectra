@@ -14,7 +14,7 @@ description: このリポジトリの Dependabot PR・OSV-Scanner の CI 失敗�
 - Dependabot の ecosystem 設定は `npm` のままで `pnpm-lock.yaml` に対応している
 - このリポジトリは GitHub auto-merge 無効。Dependabot PR は CI green 確認後 `gh pr merge <n> --squash --delete-branch` で手動マージ。lockfile を触る PR は1件マージ毎に残りが CONFLICTING になる。Dependabot が自分でリベースすることも多いが、動かなければ `@dependabot rebase` を**人が**コメントする（クラウドの Claude セッションが書くコメントは文字が書き換えられて Dependabot に届かない）
 - Dependabot alerts + security updates は有効。CVE 公開時に修正PRが自動生成され、main 側を先に直すと重複 PR は自動クローズされる
-- 未解決: #68 sprintf-js（moderate、electron-builder 配下で dev のみ、修正版未公開）。Open のまま様子見。`pnpm audit` の 1 moderate はこれ
+- 未解決: #68 sprintf-js（GHSA-hp3w-g68c-fv3c、moderate、electron-builder 配下で dev のみ、修正版未公開）。Open のまま様子見。`pnpm audit` の 1 moderate はこれ。OSV-Scanner は `osv-scanner.toml` の `[[IgnoredVulns]]` で 2027-01-15 まで除外している。期限が来たら scan がまた落ちるので、修正版が出ていれば overrides で上げて除外を消し、出ていなければ期限を延ばす
 - pnpm は Windows でも lockfile を LF で書く（npm 時代の CRLF 全行書き換えは起きない）。`.gitattributes` は未設定
 
 ## 推移依存の overrides
