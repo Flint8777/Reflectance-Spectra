@@ -5,8 +5,9 @@ on:
     tags:
       - 'v*'
 
+# ビルドでは依存パッケージのコードが動くので、書き込み権限は Release に載せる publish ジョブにだけ渡す
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-windows:
@@ -15,9 +16,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -76,16 +79,16 @@ jobs:
           name: windows-portable-dist
           path: dist-electron
 
-      - name: Attach to GitHub Release
-        uses: softprops/action-gh-release@v3
+      - name: Upload Windows release assets
+        uses: actions/upload-artifact@v7
         with:
-          files: |
+          name: release-windows
+          path: |
             dist-electron/Reflectance-Spectra-Viewer-v*_win.zip
             dist-electron/Reflectance-Spectra-Viewer-v*_win_setup.exe
             dist-electron/Reflectance-Spectra-Viewer-v*_win_setup.exe.blockmap
             dist-electron/latest.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if-no-files-found: error
 
   build-macos:
     name: Build macOS (universal) dmg
@@ -93,9 +96,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -155,22 +160,17 @@ jobs:
           name: mac-dist
           path: dist-electron/dmg
 
-      - name: Attach macOS DMG to Release
-        uses: softprops/action-gh-release@v3
-        with:
-          files: dist-electron/dmg/Reflectance.Spectra.Viewer-*_mac.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   build-web:
     name: Build web (Vite)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -201,22 +201,52 @@ jobs:
           name: web-dist
           path: web-dist-v*.zip
 
-      - name: Attach web dist to Release
-        uses: softprops/action-gh-release@v3
+  # 依存パッケージを実行しないジョブだけが書き込みトークンを持つ
+  publish:
+    name: Attach assets to GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos, build-web]
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows release assets
+        uses: actions/download-artifact@v8
         with:
-          files: web-dist-v*.zip
+          name: release-windows
+          path: release-assets
+
+      - name: Download macOS DMG
+        uses: actions/download-artifact@v8
+        with:
+          name: mac-dist
+          path: release-assets
+
+      - name: Download web dist
+        uses: actions/download-artifact@v8
+        with:
+          name: web-dist
+          path: release-assets
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: release-assets/*
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-notes:
     name: Generate release notes
     runs-on: ubuntu-latest
-    needs: [build-windows, build-macos, build-web]
+    needs: [publish]
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Generate and update release notes
         env:

@@ -100,6 +100,8 @@ Windows の正規配布は **NSIS インストーラ版**（`Reflectance-Spectra
 | portable 版（旧 ZIP） | GitHub API（`RELEASES_URL`） | `*_win_setup.exe` を TEMP に落として起動し、自分は終了＝**インストーラ版へ移行**。`installer.nsh` が `%LOCALAPPDATA%\ReflectanceSpectraViewer` の旧コピーを削除。残ったインストーラは次回起動時に `cleanupDownloadedInstallers()` が片付ける |
 | macOS | GitHub API | `*_mac.dmg` を Downloads に落として Finder で開くまで（未署名のため Squirrel.Mac は使えない。置き換えは利用者が行う） |
 
+> **自前ダウンロードの検証**（portable 版・macOS）: `electron/updateDownload.cjs` で、リダイレクトの各段を GitHub の Release 配布経路（`github.com/Flint8777/Reflectance-Spectra/releases/download/`・`release-assets.githubusercontent.com`・`objects.githubusercontent.com`）に限り、200 以外の応答を拒否し、Releases API の `asset.digest`（sha256）と照合できたファイルだけを実行・展開する。digest が無いアセットは落とさない。GitHub の配布ホストが変わったら `ASSET_CDN_HOSTS` を足す
+
 > **electron-updater の設定**: `autoDownload` / `autoInstallOnAppQuit` は false（更新ボタンを押してから落とす）、差分ダウンロードと Web インストーラは無効。未署名だが `publisherName` 未設定なので署名検証はスキップされる。`quitAndInstall` は失敗しても例外を投げないので、`autoUpdater.on('error')` で renderer に `update-error` を送って UI が「ダウンロード中」で固まらないようにしている。
 
 > **リリース成果物の整合性**: `release.yml` は `latest.yml` が生成されていること、その `url` がビルドした `*_win_setup.exe` 名と一致することを検査する。ずれると electron-updater の更新が 404 になる。インストーラのファイル名（`build.nsis.artifactName`）を変えるときは `cleanupDownloadedInstallers()` と portable 版のアセット検索（`_win_setup.exe` で終わる名前）も合わせる。
