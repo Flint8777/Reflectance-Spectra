@@ -36,8 +36,9 @@ Electron アプリを Windows 向け portable ZIP、macOS 向け DMG/ZIP とし�
 - ファイル: `.github/workflows/release.yml`
 - 目的: Windows/macOS の配布ビルド作成とリリース添付
 - トリガー: タグ push `v*`（例: `v2.3.0`）
-- 権限: `contents: write`
+- 権限: 既定は `contents: read`。書き込みは `publish` と `release-notes` ジョブだけに付ける。ビルドジョブでは依存パッケージのコードが動くので、checkout も `persist-credentials: false` にしてトークンを残さない
 - シークレット: 既定の `GITHUB_TOKEN`（追加の秘密情報は不要）
+- サードパーティの Action（`pnpm/action-setup`、`softprops/action-gh-release`）はコミット SHA で固定し、Dependabot で追従する
 
 ### ビルド概要
 
@@ -55,7 +56,9 @@ Electron アプリを Windows 向け portable ZIP、macOS 向け DMG/ZIP とし�
   - アーティファクト名: `mac-dist`
   - x64 / arm64 別の DMG（`_mac_x64.dmg` / `_mac_arm64.dmg`）は v2.12.1 までで、v2.13.0 から universal 1 本に統合
 - **web ジョブ** (`build-web`):
-  - Vite ビルドのみ実行し、`web-dist-vX.Y.Z.zip` を Release アセットに添付
+  - Vite ビルドのみ実行し、`web-dist-vX.Y.Z.zip` を作る（アーティファクト名: `web-dist`）
+- **publish ジョブ** (`publish`):
+  - 3 ジョブのアーティファクト（`release-windows` / `mac-dist` / `web-dist`）を集めて Release に添付する。依存パッケージを実行しないこのジョブだけが `contents: write` を持つ
 - コードサイン: `CSC_IDENTITY_AUTO_DISCOVERY=false`（非署名ビルド）
 
 ### リリース手順
