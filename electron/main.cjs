@@ -8,6 +8,12 @@ const { autoUpdater } = require('electron-updater');
 const { filePathsFromArgv } = require('./argvFiles.cjs');
 const { isAllowedExternalUrl } = require('./externalUrl.cjs');
 const { OpenFileQueue } = require('./openFileQueue.cjs');
+const {
+    isAllowedDownloadUrl,
+    isSafeAssetName,
+    parseSha256Digest,
+    verifySha256,
+} = require('./updateDownload.cjs');
 
 // 開発環境かどうかの判定
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -122,6 +128,11 @@ function fetchJson(url, redirectsLeft = MAX_REDIRECTS) {
 function downloadFile(url, dest, onProgress) {
     return new Promise((resolve, reject) => {
         const doDownload = (downloadUrl, redirectsLeft) => {
+            // リダイレクト先も含め、GitHub の Release 配布経路以外からは落とさない
+            if (!isAllowedDownloadUrl(downloadUrl)) {
+                reject(new Error(`blocked download url: ${downloadUrl}`));
+                return;
+            }
             https
                 .get(httpOptions(downloadUrl), (res) => {
                     if (REDIRECT_CODES.includes(res.statusCode)) {
@@ -131,6 +142,16 @@ function downloadFile(url, dest, onProgress) {
                             return;
                         }
                         doDownload(res.headers.location, redirectsLeft - 1);
+                        return;
+                    }
+                    // エラーページの本文をインストーラとして保存しないよう、200 以外は捨てる
+                    if (res.statusCode !== 200) {
+                        res.destroy();
+                        reject(
+                            new Error(
+                                `download failed: HTTP ${res.statusCode}`,
+                            ),
+                        );
                         return;
                     }
                     const totalBytes = parseInt(
@@ -165,6 +186,34 @@ function downloadFile(url, dest, onProgress) {
         };
         doDownload(url, MAX_REDIRECTS);
     });
+}
+
+// Releases API の digest（sha256）と照合できたものだけを残す。
+// digest が無い・一致しないときは、実行や展開に進ませないためファイルごと消す。
+async function downloadVerifiedAsset(asset, dir, onProgress) {
+    if (!isSafeAssetName(asset.name)) {
+        throw new Error(`unexpected asset name: ${asset.name}`);
+    }
+    const expected = parseSha256Digest(asset.digest);
+    if (!expected) {
+        throw new Error(
+            `${asset.name} に sha256 の digest がありません。Releases から手動で取得してください`,
+        );
+    }
+    const dest = path.join(dir, asset.name);
+    writeUpdaterLog(
+        'info',
+        `downloading ${asset.name} (${asset.size} bytes) -> ${dest}`,
+    );
+    try {
+        await downloadFile(asset.browser_download_url, dest, onProgress);
+        await verifySha256(dest, expected);
+    } catch (err) {
+        fs.rmSync(dest, { force: true });
+        throw err;
+    }
+    writeUpdaterLog('info', `verified sha256 of ${asset.name}`);
+    return dest;
 }
 
 // ダブルクリックや「プログラムから開く」で渡されたファイル。
@@ -352,14 +401,13 @@ ipcMain.handle('download-apply-update', async (event) => {
                     'DMG（*_mac.dmg）が見つかりません。Releases から手動で取得してください',
                 );
             }
-            const dest = path.join(app.getPath('downloads'), asset.name);
-            writeUpdaterLog(
-                'info',
-                `downloading ${asset.name} (${asset.size} bytes) -> ${dest}`,
+            const dest = await downloadVerifiedAsset(
+                asset,
+                app.getPath('downloads'),
+                (progress) => {
+                    event.sender.send('download-progress', progress);
+                },
             );
-            await downloadFile(asset.browser_download_url, dest, (progress) => {
-                event.sender.send('download-progress', progress);
-            });
             // Finder が DMG をマウントして Applications へのショートカット付きで開く
             const openError = await shell.openPath(dest);
             if (openError) throw new Error(openError);
@@ -392,14 +440,13 @@ ipcMain.handle('download-apply-update', async (event) => {
             );
         }
 
-        const dest = path.join(os.tmpdir(), asset.name);
-        writeUpdaterLog(
-            'info',
-            `downloading ${asset.name} (${asset.size} bytes)`,
+        const dest = await downloadVerifiedAsset(
+            asset,
+            os.tmpdir(),
+            (progress) => {
+                event.sender.send('download-progress', progress);
+            },
         );
-        await downloadFile(asset.browser_download_url, dest, (progress) => {
-            event.sender.send('download-progress', progress);
-        });
 
         // 先に起動してから終了する。インストーラは旧コピーを消す前に少し待つ。
         writeUpdaterLog('info', `launching installer: ${dest}`);
