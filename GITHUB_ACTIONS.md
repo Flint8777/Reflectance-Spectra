@@ -126,8 +126,8 @@ main ブランチへの PR 作成時、Vite ビルドが通るか Windows/macOS 
 
 - ファイル: `.github/workflows/verify-artifacts.yml`
 - 目的: リリース前の品質チェック（起動クラッシュ検出）
-- トリガー: `Release builds (Windows & macOS)` ワークフロー完了時
-- 権限: `contents: read`
+- トリガー: `Release builds (Windows & macOS)` ワークフロー完了時。ただし起動元がこのリポジトリ自身のタグ push（`v*`）で成功した実行のときだけ動く（`workflow_run` は名前だけで一致を取るので、フォーク PR に同名のワークフローを仕込まれても偽の成果物を起動しないため）
+- 権限: `contents: read` / `actions: read`
 
 ### 動作概要
 
