@@ -122,6 +122,8 @@ const parseParams = (view, blockStart, blockSize) => {
         if (key === 'END') break;
         const dtype = view.getInt16(blockStart + loc + 4, true);
         const valSize = view.getInt16(blockStart + loc + 6, true) * 2; // bytes
+        // 負のサイズでは読み位置が進まず無限ループになる
+        if (valSize < 0) break;
         let val;
         if (dtype === 0) {
             val = view.getInt32(blockStart + loc + 8, true);
@@ -206,6 +208,10 @@ const STRUCT_3D_INFO = [
     ['srt', 'd'],
     ['ert', 'd'],
 ];
+const STRUCT_3D_INFO_SIZE = STRUCT_3D_INFO.reduce(
+    (s, [, fmt]) => s + (fmt === 'i' ? 4 : 8),
+    0,
+);
 
 // Series ブロック解析
 //   header(24B): version, num_blocks, offset_to_first_sub, data_size, info_size, store_count
@@ -216,6 +222,9 @@ const parseDataSeries = (view, blockStart, blockSize) => {
     const subOffset = view.getInt32(blockStart + 8, true);
     const dataSize = view.getInt32(blockStart + 12, true);
     const infoSize = view.getInt32(blockStart + 16, true);
+    // 歩幅が 0 以下だと読み位置が進まず，num_blocks の数だけ積み続ける
+    if (dataSize <= 0 || infoSize < STRUCT_3D_INFO_SIZE || subOffset < 0)
+        return [];
     const spectra = [];
     let off = subOffset;
     for (let i = 0; i < numBlocks; i++) {
@@ -425,6 +434,9 @@ export const parseOpusBuffer = (arrayBuffer) => {
         if (!subs.length) continue;
         const baseSrt = subs[0].info.srt ?? 0;
         const npt = p.npt;
+        // npt で配列を確保するので，データの点数を超える値はメモリを使い切りうる
+        if (!Number.isInteger(npt) || npt <= 0 || npt > subs[0].y.length)
+            continue;
         const csf = typeof p.csf === 'number' ? p.csf : 1.0;
         const x = linspace(p.fxv, p.lxv, npt);
         for (let i = 0; i < subs.length; i++) {

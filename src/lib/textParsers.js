@@ -76,18 +76,44 @@ export function extractRelabMeta(xmlText) {
     const tabFileName = fileNameMatch[1].trim().toLowerCase();
     const recordsMatch = xmlText.match(/<records>(\d+)<\/records>/i);
     const recordCount = recordsMatch ? Number(recordsMatch[1]) : null;
-    const wlPattern =
-        '<Field_Character>[\\s\\S]*?<name>Wavelength</name>[\\s\\S]*?<field_location unit="byte">(\\d+)</field_location>[\\s\\S]*?<field_length unit="byte">(\\d+)</field_length>[\\s\\S]*?</Field_Character>';
-    const rfPattern =
-        '<Field_Character>[\\s\\S]*?<name>Reflectance</name>[\\s\\S]*?<field_location unit="byte">(\\d+)</field_location>[\\s\\S]*?<field_length unit="byte">(\\d+)</field_length>[\\s\\S]*?</Field_Character>';
-    const wlBlock = xmlText.match(new RegExp(wlPattern, 'i'));
-    const rfBlock = xmlText.match(new RegExp(rfPattern, 'i'));
-    if (!wlBlock || !rfBlock) throw new Error('fields not found');
-    const wlLoc = Number(wlBlock[1]) - 1;
-    const wlLen = Number(wlBlock[2]);
-    const rfLoc = Number(rfBlock[1]) - 1;
-    const rfLen = Number(rfBlock[2]);
-    return { tabFileName, wlLoc, wlLen, rfLoc, rfLen, recordCount };
+    const wl = findRelabField(xmlText, 'Wavelength');
+    const rf = findRelabField(xmlText, 'Reflectance');
+    if (!wl || !rf) throw new Error('fields not found');
+    return {
+        tabFileName,
+        wlLoc: wl.loc - 1,
+        wlLen: wl.len,
+        rfLoc: rf.loc - 1,
+        rfLen: rf.len,
+        recordCount,
+    };
+}
+
+// 文書全体に遅延量指定子を連ねた正規表現をかけると，閉じタグの無い XML でバックトラックが爆発する（ReDoS）．
+// Field_Character ごとに切ってから，1 つずつタグを探す
+function findRelabField(xmlText, fieldName) {
+    const chunks = xmlText.split(/<\/Field_Character>/i);
+    // 最後の片は閉じタグを持たない
+    for (const chunk of chunks.slice(0, -1)) {
+        const open = chunk.search(/<Field_Character>/i);
+        if (open < 0) continue;
+        const body = chunk.slice(open);
+        const nameAt = body.search(
+            new RegExp(`<name>${fieldName}</name>`, 'i'),
+        );
+        if (nameAt < 0) continue;
+        const afterName = body.slice(nameAt);
+        const locMatch = afterName.match(
+            /<field_location unit="byte">(\d+)<\/field_location>/i,
+        );
+        if (!locMatch) continue;
+        const lenMatch = afterName
+            .slice(locMatch.index)
+            .match(/<field_length unit="byte">(\d+)<\/field_length>/i);
+        if (!lenMatch) continue;
+        return { loc: Number(locMatch[1]), len: Number(lenMatch[1]) };
+    }
+    return null;
 }
 
 export function parseRelabTab(rawText, meta) {

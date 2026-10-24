@@ -560,3 +560,72 @@ describe('parseOpusBuffer', () => {
         expect(result.spectra[0].key).toBe('sm');
     });
 });
+
+describe('parseOpusBuffer: 壊れた・細工されたファイル', () => {
+    it('パラメータの値サイズが負でも止まらずに戻る', () => {
+        // 'ABC' dtype=0 val_size=-4 語（-8 バイト）のエントリ。読み位置が進まず無限ループになっていた
+        const bad = new Uint8Array(16);
+        bad.set(new TextEncoder().encode('ABC'), 0);
+        const bv = new DataView(bad.buffer);
+        bv.setInt16(4, 0, true);
+        bv.setInt16(6, -4, true);
+        bv.setInt32(8, 1, true);
+        const dataBlock = {
+            type: [0, 0, 0, 12, 0, 0],
+            bytes: buildDataBlock([0.1, 0.2]),
+        };
+        const statusBlock = { type: [0, 0, 1, 12, 0, 0], bytes: bad };
+        const result = parseOpusBuffer(buildOpusFile([dataBlock, statusBlock]));
+        expect(result.spectra).toHaveLength(0);
+    });
+
+    it('Series の data_size と info_size が 0 なら展開しない', () => {
+        // 歩幅 0 だと読み位置が進まず、num_blocks の数だけ空のスペクトルを積んでいた
+        const header = new Uint8Array(24 + INFO_BYTES);
+        const hv = new DataView(header.buffer);
+        hv.setInt32(4, 100000, true); // num_blocks
+        hv.setInt32(8, 24, true); // offset
+        hv.setInt32(12, 0, true); // data_size
+        hv.setInt32(16, 0, true); // info_size
+        const seriesBlock = { type: [3, 3, 0, 12, 0, 2], bytes: header };
+        const statusBlock = {
+            type: [3, 3, 1, 12, 0, 2],
+            bytes: buildParamBlock([
+                ['fxv', 1, 1.0],
+                ['lxv', 1, 2.0],
+                ['npt', 0, 2],
+                ['dpf', 0, 1],
+                ['dxu', 2, 'MI'],
+                ['csf', 1, 1.0],
+            ]),
+        };
+        const result = parseOpusBuffer(
+            buildOpusFile([seriesBlock, statusBlock]),
+        );
+        expect(result.spectra).toHaveLength(0);
+    });
+
+    it('Series の npt がデータの点数より多ければ展開しない', () => {
+        // npt でそのまま配列を確保していたので、巨大な npt でメモリを使い切れた
+        const series = buildSeriesBlock(
+            [{ y: [0.1, 0.2] }, { y: [0.3, 0.4] }],
+            [{ npt: 2 }, { npt: 2 }],
+        );
+        const seriesBlock = { type: [3, 3, 0, 12, 0, 2], bytes: series };
+        const statusBlock = {
+            type: [3, 3, 1, 12, 0, 2],
+            bytes: buildParamBlock([
+                ['fxv', 1, 1.0],
+                ['lxv', 1, 2.0],
+                ['npt', 0, 1000],
+                ['dpf', 0, 1],
+                ['dxu', 2, 'MI'],
+                ['csf', 1, 1.0],
+            ]),
+        };
+        const result = parseOpusBuffer(
+            buildOpusFile([seriesBlock, statusBlock]),
+        );
+        expect(result.spectra).toHaveLength(0);
+    });
+});

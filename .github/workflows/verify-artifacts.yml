@@ -6,13 +6,19 @@ on:
     types:
       - completed
 
+# workflow_run は名前だけで一致を取るので，フォーク PR に同名のワークフローを仕込めば偽の成果物を渡せる．
+# 成果物を起動する前に，このリポジトリ自身のタグ push で動いたリリースビルドであることを確かめる
 permissions:
   contents: read
   actions: read
 
 jobs:
   verify-windows:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
     runs-on: windows-latest
     steps:
       - name: Download Windows artifact
@@ -49,7 +55,11 @@ jobs:
 
   # Universal DMG なので Apple Silicon と Intel の両方で実際に起動するか確かめる
   verify-macos:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
     strategy:
       fail-fast: false
       matrix:
