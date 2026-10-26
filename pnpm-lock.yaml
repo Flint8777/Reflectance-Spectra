@@ -28,8 +28,8 @@ importers:
         specifier: ^5.7.0
         version: 5.7.0
       plotly.js-dist-min:
-        specifier: ^4.1.1
-        version: 4.1.1
+        specifier: ^4.1.2
+        version: 4.1.2
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -2069,8 +2069,8 @@ packages:
     resolution: {integrity: sha512-ZIfcLJC+7E7FBFnDxm9MPmt7D+DidyQ26lewieO75AdhA2ayMtsJSES0iWzqJQbcVRSrTufQoy0DR94xHue0oA==}
     engines: {node: '>=10.4.0'}
 
-  plotly.js-dist-min@4.1.1:
-    resolution: {integrity: sha512-4Jg6n9FKcn5WBuqHESZmueEBYOLjGlsz8ivzMCl03WCX+GAAOgIALvdONwIi54JDMq0tkxbu+vs5Yj7QSPQtgg==}
+  plotly.js-dist-min@4.1.2:
+    resolution: {integrity: sha512-VSmS9KVNun16S8qFYYp9LlL/XBby4ueeGqB+K9AqRCVsup8dSpGULap4UyR1f2mz4pV3qjWp1sR5chwLgIKPoQ==}
 
   plotly.js@3.5.0:
     resolution: {integrity: sha512-a3AYQIMG7OdZmrJ/fJ65HSt3g1l5qDeludKqjjafU1dh5E+fwqDhsEBndW7VCYwjlducCfN6KtPdWdiWFcoBWw==}
@@ -4964,7 +4964,7 @@ snapshots:
       base64-js: 1.5.1
       xmlbuilder: 15.1.1
 
-  plotly.js-dist-min@4.1.1: {}
+  plotly.js-dist-min@4.1.2: {}
 
   plotly.js@3.5.0(mapbox-gl@1.13.3)(supports-color@10.2.2):
     dependencies:
