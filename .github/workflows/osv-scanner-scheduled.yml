@@ -1,24 +1,85 @@
 name: OSV-Scanner Scheduled Scan
 
+# 依存に新しい脆弱性が公開されても run は赤にせず，結果を Issue 1 本にまとめる．
+# 見つかった ID の顔ぶれが変わったときだけ Issue にコメントして知らせる（2026-11-03）．
+# 赤にするのはスキャナ自体が失敗したとき（終了コード 2 以上）だけ．
+
 on:
   schedule:
-    - cron: "30 9 * * *"
-  push:
-    branches: [main]
+    - cron: "30 9 * * 1"
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: write
+
+concurrency:
+  group: osv-scanner-scheduled
 
 jobs:
   scan:
     runs-on: ubuntu-latest
+    env:
+      LC_ALL: C
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install osv-scanner
         run: |
           curl -fsSL -o /tmp/osv-scanner \
             https://github.com/google/osv-scanner/releases/download/v2.3.5/osv-scanner_linux_amd64
+          # 配布バイナリの改ざん検知のため，公式 SHA256SUMS の値と照合する
+          echo "bb30c580afe5e757d3e959f4afd08a4795ea505ef84c46962b9a738aa573b41b  /tmp/osv-scanner" | sha256sum -c -
           chmod +x /tmp/osv-scanner
       - name: Scan dependencies
-        run: /tmp/osv-scanner scan source -r .
+        run: |
+          # 終了コード 0 は脆弱性なし，1 は脆弱性あり
+          code=0
+          /tmp/osv-scanner scan source -r --format json --output-file /tmp/osv.json . || code=$?
+          if [ "$code" -gt 1 ]; then exit "$code"; fi
+          /tmp/osv-scanner scan source -r --format markdown --output-file /tmp/osv.md . || true
+      - name: Update the OSV issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          label=osv-scan
+          ids=$(jq -r '[.results[]?.packages[]?.vulnerabilities[]?.id] | unique | join(" ")' /tmp/osv.json)
+          issue=$(gh issue list --label "$label" --state open --json number --jq '.[0].number // empty')
+          old=""
+          if [ -n "$issue" ]; then
+            old=$(gh issue view "$issue" --json body --jq .body | sed -n 's/^<!-- osv-ids: \(.*\) -->$/\1/p')
+          fi
+
+          if [ -z "$ids" ]; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "すべて解消した（$RUN_URL）．"
+            fi
+            exit 0
+          fi
+
+          {
+            echo "<!-- osv-ids: $ids -->"
+            echo "最終確認: $(date -u +%F) の定期スキャン（$RUN_URL）"
+            echo
+            # Issue 本文の上限 65536 文字に収める
+            head -c 60000 /tmp/osv.md
+            echo
+            echo "---"
+            echo "lockfile の range 内で上げるか，\`osv-scanner.toml\` の \`[[IgnoredVulns]]\` に理由と期限をつけて足す．"
+            echo "直したら Actions の OSV-Scanner Scheduled Scan を手動で回すと，すべて消えたときにこの Issue が閉じる．"
+          } > /tmp/body.md
+
+          if [ -z "$issue" ]; then
+            gh label create "$label" --color B60205 --description "OSV-Scanner の定期スキャンの結果" --force
+            gh issue create --title "OSV-Scanner が見つけた依存の脆弱性" --label "$label" --body-file /tmp/body.md
+            exit 0
+          fi
+
+          # 本文の書き換えは通知されないので，顔ぶれが変わったときだけコメントで知らせる
+          gh issue edit "$issue" --body-file /tmp/body.md
+          if [ "$ids" != "$old" ]; then
+            added=$(comm -13 <(tr ' ' '\n' <<<"$old" | sort) <(tr ' ' '\n' <<<"$ids" | sort) | paste -sd' ')
+            removed=$(comm -23 <(tr ' ' '\n' <<<"$old" | sort) <(tr ' ' '\n' <<<"$ids" | sort) | paste -sd' ')
+            gh issue comment "$issue" --body "顔ぶれが変わった．増えた: ${added:-なし}．消えた: ${removed:-なし}（$RUN_URL）．"
+          fi
