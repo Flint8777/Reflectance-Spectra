@@ -49,5 +49,5 @@ description: リリース前の検証項目一覧。自動テスト・Playwright
 - `.github/workflows/release.yml`: タグ push で Windows（NSIS インストーラ + portable ZIP、`latest.yml` の url とインストーラ名の一致を検査）/ macOS（universal DMG）/ Web をビルドして Release に添付し、最後に必要なアセットが揃っているか検査
 - `.github/workflows/pr-build-check.yml`: PR で Windows ビルドと macOS universal .app のビルド検証（`src/` / `electron/` / `package.json` / `pnpm-lock.yaml` / `pnpm-workspace.yaml` / `vite.config.js` の変更時）
 - `.github/workflows/verify-artifacts.yml`: release 完了後、portable ZIP の EXE と DMG の .app（Apple Silicon / Intel）が起動するか
-- `.github/workflows/osv-scanner-scheduled.yml`: 毎週月曜と手動で依存の脆弱性スキャン。赤にせず `osv-scan` ラベルの Issue に結果を書く
+- `.github/workflows/osv-scanner-scheduled.yml`: 毎週月曜と手動で依存の脆弱性スキャン。赤にせず Security タブの Code scanning に結果を上げる
 - `.github/workflows/osv-scanner-pr.yml`: PR で main と比べ，PR が新しく持ち込んだ脆弱性があるときだけ落ちる

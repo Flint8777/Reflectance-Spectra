@@ -1,7 +1,8 @@
 name: OSV-Scanner PR Scan
 
 # PR が新しく持ち込んだ脆弱性があるときだけ落とす（2026-11-03）．
-# main にも同じだけある脆弱性は PR と関係が無いので，定期スキャンの Issue で扱う．
+# main にも同じだけある脆弱性は PR と関係が無いので，定期スキャン（Code scanning）で扱う．
+# Public リポジトリで Actions のログは誰でも読めるので，増えた件数だけを出し，ID は出さない（2026-11-04）．
 
 on:
   pull_request:
@@ -47,10 +48,5 @@ jobs:
             echo "この PR が持ち込んだ脆弱性は無い．"
             exit 0
           fi
-          jq -r --arg new "$new" '
-            ($new | split("\n")) as $n
-            | .results[].packages[] as $p
-            | $p.vulnerabilities[] | select(.id as $i | $n | index($i))
-            | "::error::\($p.package.ecosystem) \($p.package.name)@\($p.package.version): https://osv.dev/\(.id)"
-          ' /tmp/head.json
+          echo "::error::この PR で脆弱性が $(wc -l <<<"$new") 件増えた．中身は手元で osv-scanner scan source -r . を回して確かめる．"
           exit 1
