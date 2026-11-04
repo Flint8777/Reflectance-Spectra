@@ -9,7 +9,7 @@ description: このリポジトリの Dependabot PR・OSV-Scanner の CI 失敗�
 
 ## Dependabot / OSV 運用
 
-- OSV-Scanner は `osv-scanner-scheduled.yml`（毎日 + main への push、`osv-scanner scan source -r .`）だけで、dev/推移依存の脆弱性でも `exit 1` で落ちる。**PR 向けの OSV スキャンは無い**ので、PR の段階では気づけない。依存を触る PR の前に手元で `pnpm audit`（実行時依存だけなら `pnpm audit --prod`）を見る。修正をマージしたら main への push で走る scan の結果まで確認する
+- OSV-Scanner は 2 本ある（2026-11-03 に作り直した）。`osv-scanner-scheduled.yml` は毎週月曜と手動で走り，脆弱性があっても赤にせず，結果を SARIF で Security タブの Code scanning に上げる（書き込み権限のある人だけが見られる。Public なので Issue やログに一覧を出さない，2026-11-04）。Code scanning は新しい alert をメールで知らせないので，気づくのは Dependabot alerts のメールに任せる。`osv-scanner-pr.yml` は PR と main を比べ，PR が新しく持ち込んだ脆弱性があるときだけ落ちる。ログには件数だけが出るので，中身は手元で `osv-scanner scan source -r .` か `pnpm audit` で見る。修正をマージしたら scheduled を手動で回し，Code scanning の alert が閉じるのを確かめる
 - 推移依存は親の range 内に修正版があれば `pnpm update <pkg> --depth 99` で lockfile だけ更新する。range 内に修正版があっても lockfile が動かないことがあり、そのときは下の overrides で下限を上げる
 - Dependabot の ecosystem 設定は `npm` のままで `pnpm-lock.yaml` に対応している
 - このリポジトリは GitHub auto-merge 無効。Dependabot PR は CI green 確認後 `gh pr merge <n> --squash --delete-branch` で手動マージ。lockfile を触る PR は1件マージ毎に残りが CONFLICTING になる。Dependabot が自分でリベースすることも多いが、動かなければ `@dependabot rebase` を**人が**コメントする（クラウドの Claude セッションが書くコメントは文字が書き換えられて Dependabot に届かない）

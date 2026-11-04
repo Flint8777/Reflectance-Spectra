@@ -1,0 +1,52 @@
+name: OSV-Scanner PR Scan
+
+# PR が新しく持ち込んだ脆弱性があるときだけ落とす（2026-11-03）．
+# main にも同じだけある脆弱性は PR と関係が無いので，定期スキャン（Code scanning）で扱う．
+# Public リポジトリで Actions のログは誰でも読めるので，増えた件数だけを出し，ID は出さない（2026-11-04）．
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    env:
+      LC_ALL: C
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install osv-scanner
+        run: |
+          curl -fsSL -o /tmp/osv-scanner \
+            https://github.com/google/osv-scanner/releases/download/v2.3.5/osv-scanner_linux_amd64
+          # 配布バイナリの改ざん検知のため，公式 SHA256SUMS の値と照合する
+          echo "bb30c580afe5e757d3e959f4afd08a4795ea505ef84c46962b9a738aa573b41b  /tmp/osv-scanner" | sha256sum -c -
+          chmod +x /tmp/osv-scanner
+      - name: Check out the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --depth=1 origin "$BASE_REF"
+          git worktree add /tmp/base FETCH_HEAD
+      - name: Scan the base and the PR
+        run: |
+          # 終了コード 0 は脆弱性なし，1 は脆弱性あり．2 以上はスキャナの失敗なので止める
+          scan() {
+            local code=0
+            /tmp/osv-scanner scan source -r --format json --output-file "$2" "$1" || code=$?
+            if [ "$code" -gt 1 ]; then exit "$code"; fi
+          }
+          ids() { jq -r '[.results[]?.packages[]?.vulnerabilities[]?.id] | unique | .[]' "$1"; }
+          scan /tmp/base /tmp/base.json
+          scan . /tmp/head.json
+
+          new=$(comm -13 <(ids /tmp/base.json) <(ids /tmp/head.json))
+          if [ -z "$new" ]; then
+            echo "この PR が持ち込んだ脆弱性は無い．"
+            exit 0
+          fi
+          echo "::error::この PR で脆弱性が $(wc -l <<<"$new") 件増えた．中身は手元で osv-scanner scan source -r . を回して確かめる．"
+          exit 1
