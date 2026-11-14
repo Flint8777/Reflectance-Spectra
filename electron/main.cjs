@@ -23,6 +23,11 @@ if (isDev) {
     process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true';
 }
 
+// 開発起動時だけ DevTools Protocol を localhost に開く（Claude がコンソールを読めるように）
+if (!app.isPackaged) {
+    app.commandLine.appendSwitch('remote-debugging-port', '9222');
+}
+
 // 自動ダウンロードはしない（ユーザーがボタンを押してから落とす）。
 // 差分ダウンロードは未検証の経路なので無効にする。
 autoUpdater.autoDownload = false;
