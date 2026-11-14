@@ -11,7 +11,10 @@
             "!**/dist",
             "!**/dist-electron",
             "!**/.claude",
-            "!package-lock.json"
+            "!package-lock.json",
+            "!**/*.yml",
+            "!**/*.yaml",
+            "!**/*.md"
         ]
     },
     "formatter": {
