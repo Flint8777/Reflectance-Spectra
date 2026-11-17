@@ -226,6 +226,25 @@ const buildOpusFile = (blocks) => {
     return out.buffer;
 };
 
+// buildOpusFile の出力の目次（ファイル末尾）に項目を書き足す
+// entries: [{ type: [6 ints], sizeWords, start }]
+const withExtraDirEntries = (buffer, entries) => {
+    const src = new Uint8Array(buffer);
+    const out = new Uint8Array(src.length + entries.length * 12);
+    out.set(src, 0);
+    const v = new DataView(out.buffer);
+    entries.forEach((e, i) => {
+        const off = src.length + i * 12;
+        v.setInt32(off, encodeBlockType(e.type), true);
+        v.setInt32(off + 4, e.sizeWords, true);
+        v.setInt32(off + 8, e.start, true);
+    });
+    const numBlocks = v.getInt32(20, true) + entries.length;
+    v.setInt32(16, numBlocks, true);
+    v.setInt32(20, numBlocks, true);
+    return out.buffer;
+};
+
 // ------------- テスト -------------
 
 describe('isOpusMagic', () => {
@@ -627,5 +646,60 @@ describe('parseOpusBuffer: 壊れた・細工されたファイル', () => {
             buildOpusFile([seriesBlock, statusBlock]),
         );
         expect(result.spectra).toHaveLength(0);
+    });
+
+    it('目次に同じデータブロックが何度も載っていても 1 本だけ返す', () => {
+        // 重複した項目ごとにスペクトルを作り直していたので、小さなファイルでメモリを使い切れた
+        const dataBlock = {
+            type: [0, 0, 0, 12, 0, 0],
+            bytes: buildDataBlock([0.1, 0.2, 0.3]),
+        };
+        const statusBlock = {
+            type: [0, 0, 1, 12, 0, 0],
+            bytes: buildParamBlock([
+                ['fxv', 1, 1.0],
+                ['lxv', 1, 3.0],
+                ['npt', 0, 3],
+                ['dpf', 0, 1],
+                ['dxu', 2, 'MI'],
+            ]),
+        };
+        const buf = buildOpusFile([dataBlock, statusBlock]);
+        const dup = Array.from({ length: 50 }, () => ({
+            type: dataBlock.type,
+            sizeWords: 3,
+            start: 24,
+        }));
+        const result = parseOpusBuffer(withExtraDirEntries(buf, dup));
+        expect(result.spectra).toHaveLength(1);
+    });
+
+    it('重なり合うデータブロックで点数がファイルの大きさを超えるなら例外にする', () => {
+        // 開始位置を 4 バイトずつずらした項目でも、同じバイト列を何度も読ませられる
+        const N = 2000;
+        const K = 40;
+        const dataBlock = {
+            type: [0, 0, 0, 12, 0, 0],
+            bytes: buildDataBlock(Array.from({ length: N }, (_, i) => i)),
+        };
+        const statusBlocks = Array.from({ length: K }, (_, i) => ({
+            type: [0, 0, 1, 12, 0, 0],
+            bytes: buildParamBlock([
+                ['fxv', 1, 1.0],
+                ['lxv', 1, 2.0],
+                ['npt', 0, N - i],
+                ['dpf', 0, 1],
+                ['dxu', 2, 'MI'],
+            ]),
+        }));
+        const buf = buildOpusFile([dataBlock, ...statusBlocks]);
+        const overlapping = Array.from({ length: K - 1 }, (_, j) => ({
+            type: dataBlock.type,
+            sizeWords: N - (j + 1),
+            start: 24 + 4 * (j + 1),
+        }));
+        expect(() =>
+            parseOpusBuffer(withExtraDirEntries(buf, overlapping)),
+        ).toThrow();
     });
 });
