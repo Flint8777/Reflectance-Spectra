@@ -93,6 +93,7 @@ const parseHeader = (view) => ({
 
 const parseDirectory = (view, start, numBlocks) => {
     const blocks = [];
+    const seenStarts = new Set();
     for (let i = 0; i < numBlocks; i++) {
         const off = start + i * 12;
         if (off + 12 > view.byteLength) break;
@@ -100,6 +101,9 @@ const parseDirectory = (view, start, numBlocks) => {
         const sizeWords = view.getInt32(off + 4, true);
         const blockStart = view.getInt32(off + 8, true);
         if (blockStart <= 0) break;
+        // 同じ位置を指す項目は 1 つだけ採る（重複の数だけスペクトルを作り直さないため）
+        if (seenStarts.has(blockStart)) continue;
+        seenStarts.add(blockStart);
         blocks.push({
             type: decodeBlockType(typeInt),
             size: sizeWords * 4,
@@ -395,6 +399,15 @@ export const parseOpusBuffer = (arrayBuffer) => {
     }
 
     const spectra = [];
+    // 正しいファイルなら 1 点に 4 バイト以上を使うので、点数の合計はファイルの大きさ / 4 を超えない。
+    // 重なり合うブロックで同じバイト列を何度も読ませる細工はここで止める
+    const pointBudget = Math.ceil(view.byteLength / 4);
+    let pointsUsed = 0;
+    const reservePoints = (n) => {
+        pointsUsed += n;
+        if (pointsUsed > pointBudget)
+            throw new Error('OPUS: total points exceed the file size');
+    };
 
     // 1D データブロックのペアリングと展開
     const pairs = pairDataAndStatus(dataBlocks, statusBlocks);
@@ -404,8 +417,9 @@ export const parseOpusBuffer = (arrayBuffer) => {
         const p = status.params;
         if (typeof p.fxv !== 'number' || typeof p.lxv !== 'number') continue;
         const dpf = typeof p.dpf === 'number' ? p.dpf : 1;
-        const raw = parseData(view, d.start, d.size, dpf);
         const npt = p.npt;
+        reservePoints(npt);
+        const raw = parseData(view, d.start, d.size, dpf);
         const csf = typeof p.csf === 'number' ? p.csf : 1.0;
         // Compact 形式は先頭にメタデータがあるので末尾 npt 個を取る
         const offset = isCompactData(d.type) ? raw.length - npt : 0;
@@ -441,6 +455,7 @@ export const parseOpusBuffer = (arrayBuffer) => {
         const x = linspace(p.fxv, p.lxv, npt);
         for (let i = 0; i < subs.length; i++) {
             const sub = subs[i];
+            reservePoints(npt);
             const y = new Array(npt);
             for (let k = 0; k < npt; k++) y[k] = csf * sub.y[k];
             spectra.push({
