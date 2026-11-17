@@ -100,7 +100,8 @@ export function NormalizationDialog({
     const [error, setError] = useState('');
 
     const unitHint = (() => {
-        const m = String(xLabel || '').match(/\(([^)]+)\)/);
+        // 括弧の中に「(」を許すと、「(」の連続で 2 乗の時間かかる（ラベルは CSV のヘッダー由来）
+        const m = String(xLabel || '').match(/\(([^()]+)\)/);
         return m ? m[1] : '';
     })();
 

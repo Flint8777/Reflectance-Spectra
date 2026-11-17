@@ -1381,7 +1381,8 @@ export default function App() {
                                 return '—';
                             const unitOf = (label) => {
                                 const m = String(label || '').match(
-                                    /\(([^)]+)\)\s*$/,
+                                    // 括弧の中に「(」を許すと、「(」の連続で 2 乗の時間かかる
+                                    /\(([^()]+)\)\s*$/,
                                 );
                                 return m ? ` ${m[1]}` : '';
                             };
