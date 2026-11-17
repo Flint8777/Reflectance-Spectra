@@ -13,9 +13,10 @@ on:
       - 'vite.config.js'
       - '.github/workflows/pr-build-check.yml'
 
+# PR と依存のコードを走らせるビルドのジョブには読み取りの token だけを渡す。
+# PR へのコメントは、checkout もビルドもしない comment ジョブだけが書き込み権限を持つ
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   build-check-windows:
@@ -24,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -40,36 +43,14 @@ jobs:
       - name: Build (verify only)
         run: pnpm run build
 
-      - name: Comment on PR (success)
-        if: success()
-        uses: actions/github-script@v9
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Windows build check passed'
-            })
-
-      - name: Comment on PR (failure)
-        if: failure()
-        uses: actions/github-script@v9
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ Windows build check failed — [ログを確認](' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ')'
-            })
-
   build-check-macos:
     name: macOS Build Check
     runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -100,26 +81,36 @@ jobs:
             *) echo "::error::expected x86_64 + arm64, got: $archs"; exit 1 ;;
           esac
 
-      - name: Comment on PR (success)
-        if: success()
+  comment:
+    name: Comment on PR
+    needs: [build-check-windows, build-check-macos]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment build results
         uses: actions/github-script@v9
+        env:
+          WINDOWS_RESULT: ${{ needs.build-check-windows.result }}
+          MACOS_RESULT: ${{ needs.build-check-macos.result }}
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ macOS build check passed'
-            })
-
-      - name: Comment on PR (failure)
-        if: failure()
-        uses: actions/github-script@v9
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ macOS build check failed — [ログを確認](' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId + ')'
-            })
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            // 以前と同じく、成功と失敗のときだけ OS ごとに 1 件ずつ書く（キャンセル・スキップでは書かない）
+            const results = [
+              ['Windows', process.env.WINDOWS_RESULT],
+              ['macOS', process.env.MACOS_RESULT],
+            ];
+            for (const [os, result] of results) {
+              let body;
+              if (result === 'success') body = `✅ ${os} build check passed`;
+              else if (result === 'failure') body = `❌ ${os} build check failed — [ログを確認](${runUrl})`;
+              else continue;
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body,
+              });
+            }

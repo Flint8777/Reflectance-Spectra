@@ -88,15 +88,19 @@
 
     ; portable 版（zip を %LOCALAPPDATA%\ReflectanceSpectraViewer に展開したもの）から
     ; 移行してきた場合に旧コピーを片付ける。
+    ; - 全ユーザー向けのインストールでは何もしない。$LOCALAPPDATA が C:\ProgramData を指し、
+    ;   一般の利用者でも作れるフォルダを管理者権限で消すことになるため
     ; - インストール先が同じ場所なら何もしない
-    ; - 旧 exe の存在を確認してから消す（無関係なフォルダを消さないため）
-    ; - 旧アプリの終了を待ってから消す。使用中のファイルが残っても RMDir /r は
-    ;   黙って続行するので、インストール自体は壊れない
+    ; - 旧アプリの終了を待ってから、旧 exe の存在を確認して消す（無関係なフォルダを消さないため。
+    ;   確認と削除の間は空けない）。使用中のファイルが残っても RMDir /r は黙って続行するので、
+    ;   インストール自体は壊れない
+    StrCmp $installMode "all" skipLegacyCleanup 0
     StrCpy $R0 "$LOCALAPPDATA\ReflectanceSpectraViewer"
     StrCmp "$INSTDIR" "$R0" skipLegacyCleanup 0
+    IfFileExists "$R0\*.*" 0 skipLegacyCleanup
+      Sleep 3000
     IfFileExists "$R0\Reflectance Spectra Viewer.exe" 0 skipLegacyCleanup
       DetailPrint "Removing the previous portable copy: $R0"
-      Sleep 3000
       RMDir /r "$R0"
     skipLegacyCleanup:
   !macroend

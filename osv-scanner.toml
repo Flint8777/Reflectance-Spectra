@@ -6,3 +6,12 @@
 id = "GHSA-hp3w-g68c-fv3c"
 ignoreUntil = 2027-01-15
 reason = "Dev-only transitive dep via electron-builder > app-builder-lib > @electron/get > global-agent > roarr; no fixed version yet (#68)"
+
+# minimatch 9.0.9 / 10.2.5: globparts の膨張による DoS（CVE-2026-118764）．修正版は 11.0.1 だけ（major）
+# 経路は electron-builder > app-builder-lib と @electron/universal（mac の universal 結合）で，
+# パッケージ時に自前の glob を展開するのにしか使われず，配布物にも入らない．
+# 期限が来たら electron-builder が minimatch 11 に上がっていないか確かめ，上がっていればこの項目を消す
+[[IgnoredVulns]]
+id = "GHSA-g3hv-75wg-m249"
+ignoreUntil = 2027-02-17
+reason = "Dev-only transitive dep via electron-builder (app-builder-lib, @electron/universal); fix only in minimatch 11 (major)"
