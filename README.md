@@ -174,11 +174,11 @@ pnpm run test:run
 
 ### 使用技術
 
-- Electron 42
+- Electron 45
 - React 19
-- Plotly.js v3（WebGL）
+- Plotly.js v4（WebGL）
 - Vite 8
-- Vitest 4
+- Vitest 5
 - PapaParse（CSV解析）
 
 ### CI/CD
