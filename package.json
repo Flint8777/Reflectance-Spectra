@@ -30,16 +30,16 @@
     "react-plotly.js": "^4.1.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.7",
+    "@biomejs/biome": "^2.6.8",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@vitejs/plugin-react": "^6.3.0",
     "concurrently": "^10.0.7",
-    "electron": "^45.3.1",
+    "electron": "^45.4.1",
     "electron-builder": "^26.18.0",
     "jsdom": "^31.0.1",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0",
+    "vitest": "^5.1.1",
     "wait-on": "^9.5.1"
   },
   "optionalDependencies": {
